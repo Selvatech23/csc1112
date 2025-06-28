@@ -1,49 +1,29 @@
+Sub space()
+'
+' space Macro
+'
 
-Sub countvalue()
 '
-' countvalue Macro
-'
-
-'
-    ActiveCell.FormulaR1C1 = "=COUNTA('FEN Records'!RC[-6]:R[12872]C[-6])"
-    Range("G3").Select
-    ActiveCell.FormulaR1C1 = "=COUNTIF('FEN Records'!C[-3],""No"")"
-    Range("G4").Select
-    ActiveCell.FormulaR1C1 = "=COUNTIF('FEN Records'!C[-3],""No"")"
-    Range("G5").Select
-    ActiveCell.FormulaR1C1 = "0"
-    Range("G6").Select
-    ActiveCell.FormulaR1C1 = "0"
-    Range("G7").Select
-    ActiveCell.FormulaR1C1 = "0"
-    Range("G8").Select
-    ActiveCell.FormulaR1C1 = "=COUNTIF('FEN Records'!C[-3],""Yes"")"
-    Range("G9").Select
-    ActiveCell.FormulaR1C1 = "=R[-7]C-(R[-6]C+R[-1]C)"
-    Range("G11").Select
-    ActiveCell.FormulaR1C1 = "=COUNTIF('FEN Records'!C[-3],""No"")"
-    Range("G12").Select
-    ActiveCell.FormulaR1C1 = ""
-    Range("G13").Select
-    Sheets("GBCLM_REPORT").Select
-    Windows("26062025.xlsx").Activate
-    Range("G12").Select
-    ActiveCell.FormulaR1C1 = "=[23062025.xlsx]GBCLM_REPORT!R3C7"
-    Range("G13").Select
+    Range(Selection, Selection.End(xlDown)).Select
+    Selection.Copy
+    Sheets.Add After:=ActiveSheet
+    Sheets("Sheet5").Select
+    Sheets("Sheet5").Name = "Space issue"
+    ActiveSheet.Paste
+    Columns("A:A").Select
+    Selection.Replace What:="FEN-", Replacement:="", LookAt:=xlPart, _
+        SearchOrder:=xlByRows, MatchCase:=False, SearchFormat:=False, _
+        ReplaceFormat:=False, FormulaVersion:=xlReplaceFormula2
     Application.CutCopyMode = False
-    ActiveCell.FormulaR1C1 = "=R[-2]C-R[-1]C"
-    Range("G14").Select
-    ActiveCell.FormulaR1C1 = "=R[-1]C/R[-3]C*100"
-    Range("G16").Select
-    Application.CutCopyMode = False
-    ActiveCell.FormulaR1C1 = "=R[-14]C"
-    Range("G17").Select
-    ActiveCell.FormulaR1C1 = "=[23062025.xlsx]GBCLM_REPORT!R2C7"
-    Range("G18").Select
-    Application.CutCopyMode = False
-    ActiveCell.FormulaR1C1 = "=R[-2]C-R[-1]C"
-    Range("G19").Select
+    ActiveSheet.Range("$A$1:$A$102654").RemoveDuplicates Columns:=1, Header:= _
+        xlNo
+    Range("B1").Select
+    ActiveCell.FormulaR1C1 = "STATUS"
+    Range("B2").Select
+    ActiveCell.FormulaR1C1 = _
+        "=VLOOKUP(RC[-1],'[25062025.xlsm]Space issue'!C1:C2,2,0)"
+    Range("B2").Select
+    Selection.AutoFill Destination:=Range("B2:B95046")
+    Range("B2:B95046").Select
+    Range("B1").Select
 End Sub
-
-
-
