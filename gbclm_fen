@@ -1,46 +1,39 @@
 Option Explicit
 
-Sub ProcessReport_Steps_1_and_2_Simple()
+Sub ProcessReport_Steps_1_2_and_3()
 
     '==================================================================================
     '===[ SETUP ]======================================================================
     '==================================================================================
     
-    Application.ScreenUpdating = False ' Prevents screen flicker, speeds up macro
+    Application.ScreenUpdating = False
     
-    ' Using ActiveSheet ensures we are starting in the correct workbook from the beginning.
+    Dim reportWB As Workbook
+    Set reportWB = ActiveWorkbook
+    
     Dim wsReport As Worksheet
-    Set wsReport = ActiveSheet
+    Set wsReport = reportWB.ActiveSheet
+    
     
     '==================================================================================
-    '===[ STEP 1: PARSE AND PREPARE "GBCLM_REPORT" SHEET ]=============================
+    '===[ STEP 1: PARSE AND PREPARE "GBCLM_REPORT" SHEET (UNTOUCHED) ]=================
     '==================================================================================
     
-    ' Action 1.1: Parse data in Column A using "|" as the delimiter
     wsReport.Columns("A:A").TextToColumns Destination:=wsReport.Range("A1"), _
                                       DataType:=xlDelimited, _
                                       TextQualifier:=xlDoubleQuote, _
                                       ConsecutiveDelimiter:=False, _
-                                      Tab:=False, _
-                                      Semicolon:=False, _
-                                      Comma:=False, _
-                                      Space:=False, _
-                                      Other:=True, _
-                                      OtherChar:="|"
-
-    ' Action 1.2: Delete the first column of data after the split.
+                                      Tab:=False, Semicolon:=False, Comma:=False, Space:=False, _
+                                      Other:=True, OtherChar:="|"
+                                      
     wsReport.Columns("A:A").Delete
-    
-    ' Action 1.3: Autofit column widths
     wsReport.Cells.EntireColumn.AutoFit
     
-    ' Action 1.4: Rename the worksheet to "GBCLM_REPORT"
     If wsReport.Name <> "GBCLM_REPORT" Then
         On Error Resume Next
         wsReport.Name = "GBCLM_REPORT"
         If Err.Number <> 0 Then
-            MsgBox "Could not rename the sheet to 'GBCLM_REPORT'." & vbCrLf & _
-                   "Another sheet may already have that name. Aborting macro.", vbCritical
+            MsgBox "Could not rename the sheet to 'GBCLM_REPORT'.", vbCritical
             Err.Clear
             Application.ScreenUpdating = True
             Exit Sub
@@ -50,30 +43,72 @@ Sub ProcessReport_Steps_1_and_2_Simple()
     
 
     '==================================================================================
-    '===[ STEP 2: CREATE SHEET AND COPY HEADERS ONLY (IN ACTIVE WORKBOOK) ]============
+    '===[ STEP 2: CREATE SHEET AND COPY HEADERS ONLY (UNTOUCHED) ]=====================
     '==================================================================================
     
     Dim wsFEN As Worksheet
     
-    ' --- CORRECTED ---
-    ' Action 2.1: Use ActiveWorkbook to ensure we delete/add sheets in the data file.
     Application.DisplayAlerts = False
     On Error Resume Next
-    ActiveWorkbook.Worksheets("FEN Records").Delete ' Changed from ThisWorkbook
+    reportWB.Worksheets("FEN Records").Delete
     On Error GoTo 0
     Application.DisplayAlerts = True
     
-    ' --- CORRECTED ---
-    Set wsFEN = ActiveWorkbook.Worksheets.Add(After:=wsReport) ' Changed from ThisWorkbook
+    Set wsFEN = reportWB.Worksheets.Add(After:=wsReport)
     wsFEN.Name = "FEN Records"
     
-    ' Action 2.2: Copy ONLY the header range (A21:E21) to the new sheet
     wsReport.Range("A21:E21").Copy Destination:=wsFEN.Range("A1")
-    
-    ' Action 2.3: Autofit the columns on the new sheet so the headers are readable
     wsFEN.Cells.EntireColumn.AutoFit
     
-    ' Action 2.4: Leave the new sheet active so you can see the result
+
+    '==================================================================================
+    '===[ STEP 3: FILTER, COPY, AND PASTE "FEN-" DATA ]================================
+    '==================================================================================
+    
+    Dim lastRow As Long
+    Dim filterRange As Range
+    Dim dataToCopy As Range
+    
+    ' Action 3.1: Find the last row of data on the GBCLM_REPORT sheet.
+    lastRow = wsReport.Cells(wsReport.Rows.Count, "A").End(xlUp).Row
+    
+    ' Only proceed if there is data below the header (row 21).
+    If lastRow > 21 Then
+    
+        ' Action 3.2 (Crucial for reliability): Silently clean Column A data to remove hidden spaces.
+        ' This ensures the filter "FEN-*" will always work correctly.
+        Dim rangeToClean As Range
+        Set rangeToClean = wsReport.Range("A22:A" & lastRow)
+        rangeToClean.Value = Application.WorksheetFunction.Trim(rangeToClean)
+    
+        ' Action 3.3: Define the full range to filter (A21:E<lastRow>).
+        Set filterRange = wsReport.Range("A21:E" & lastRow)
+        
+        ' Action 3.4: Apply the filter to find rows where Column A starts with "FEN-".
+        wsReport.AutoFilterMode = False ' Clear any previous filters.
+        filterRange.AutoFilter Field:=1, Criteria1:="FEN-*"
+        
+        ' Action 3.5: Identify only the visible data rows (excluding the header).
+        On Error Resume Next ' Handles case where filter finds nothing.
+        Set dataToCopy = filterRange.Offset(1, 0).SpecialCells(xlCellTypeVisible)
+        On Error GoTo 0
+        
+        ' Action 3.6: Copy the found data to the "FEN Records" sheet.
+        If Not dataToCopy Is Nothing Then
+            dataToCopy.Copy Destination:=wsFEN.Range("A2")
+            ' Autofit the columns again now that the data is pasted.
+            wsFEN.Cells.EntireColumn.AutoFit
+        Else
+            ' Optional: Note if no records were found.
+            wsFEN.Range("A2").Value = "No 'FEN-' records were found in the report."
+        End If
+        
+        ' Action 3.7: IMPORTANT - Remove the filter from the GBCLM_REPORT sheet.
+        wsReport.AutoFilterMode = False
+        
+    End If ' End of check for data (If lastRow > 21)
+    
+    ' Action 3.8: Make sure the final FEN Records sheet is active for the user to see.
     wsFEN.Activate
 
     '==================================================================================
@@ -81,8 +116,9 @@ Sub ProcessReport_Steps_1_and_2_Simple()
     '==================================================================================
 
     Application.ScreenUpdating = True
-    MsgBox "Process complete." & vbCrLf & vbCrLf & _
-           "Step 1: 'GBCLM_REPORT' sheet prepared." & vbCrLf & _
-           "Step 2: 'FEN Records' sheet created with headers only.", vbInformation
+    MsgBox "Process complete!" & vbCrLf & vbCrLf & _
+           "Step 1: 'GBCLM_REPORT' prepared." & vbCrLf & _
+           "Step 2: 'FEN Records' sheet created with headers." & vbCrLf & _
+           "Step 3: 'FEN-' data copied successfully.", vbInformation
 
 End Sub
