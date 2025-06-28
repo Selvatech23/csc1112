@@ -1,83 +1,49 @@
-Sub pivot()
+
+Sub countvalue()
 '
-' pivot Macro
+' countvalue Macro
 '
 
 '
-    Range("A21:E21").Select
-    Range(Selection, Selection.End(xlDown)).Select
+    ActiveCell.FormulaR1C1 = "=COUNTA('FEN Records'!RC[-6]:R[12872]C[-6])"
+    Range("G3").Select
+    ActiveCell.FormulaR1C1 = "=COUNTIF('FEN Records'!C[-3],""No"")"
+    Range("G4").Select
+    ActiveCell.FormulaR1C1 = "=COUNTIF('FEN Records'!C[-3],""No"")"
+    Range("G5").Select
+    ActiveCell.FormulaR1C1 = "0"
+    Range("G6").Select
+    ActiveCell.FormulaR1C1 = "0"
+    Range("G7").Select
+    ActiveCell.FormulaR1C1 = "0"
+    Range("G8").Select
+    ActiveCell.FormulaR1C1 = "=COUNTIF('FEN Records'!C[-3],""Yes"")"
+    Range("G9").Select
+    ActiveCell.FormulaR1C1 = "=R[-7]C-(R[-6]C+R[-1]C)"
+    Range("G11").Select
+    ActiveCell.FormulaR1C1 = "=COUNTIF('FEN Records'!C[-3],""No"")"
+    Range("G12").Select
+    ActiveCell.FormulaR1C1 = ""
+    Range("G13").Select
+    Sheets("GBCLM_REPORT").Select
+    Windows("26062025.xlsx").Activate
+    Range("G12").Select
+    ActiveCell.FormulaR1C1 = "=[23062025.xlsx]GBCLM_REPORT!R3C7"
+    Range("G13").Select
     Application.CutCopyMode = False
-    Sheets.Add
-    ActiveWorkbook.PivotCaches.Create(SourceType:=xlDatabase, SourceData:= _
-        "GBCLM_REPORT!R21C1:R102674C5", Version:=8).CreatePivotTable _
-        TableDestination:="Sheet3!R3C1", TableName:="PivotTable1", DefaultVersion _
-        :=8
-    Sheets("Sheet3").Select
-    Cells(3, 1).Select
-    With ActiveSheet.PivotTables("PivotTable1")
-        .ColumnGrand = True
-        .HasAutoFormat = True
-        .DisplayErrorString = False
-        .DisplayNullString = True
-        .EnableDrilldown = True
-        .ErrorString = ""
-        .MergeLabels = False
-        .NullString = ""
-        .PageFieldOrder = 2
-        .PageFieldWrapCount = 0
-        .PreserveFormatting = True
-        .RowGrand = True
-        .SaveData = True
-        .PrintTitles = False
-        .RepeatItemsOnEachPrintedPage = True
-        .TotalsAnnotation = False
-        .CompactRowIndent = 1
-        .InGridDropZones = False
-        .DisplayFieldCaptions = True
-        .DisplayMemberPropertyTooltips = False
-        .DisplayContextTooltips = True
-        .ShowDrillIndicators = True
-        .PrintDrillIndicators = False
-        .AllowMultipleFilters = False
-        .SortUsingCustomLists = True
-        .FieldListSortAscending = False
-        .ShowValuesRow = False
-        .CalculatedMembersInFilters = False
-        .RowAxisLayout xlCompactRow
-    End With
-    With ActiveSheet.PivotTables("PivotTable1").PivotCache
-        .RefreshOnFileOpen = False
-        .MissingItemsLimit = xlMissingItemsDefault
-    End With
-    ActiveSheet.PivotTables("PivotTable1").RepeatAllLabels xlRepeatLabels
-    With ActiveSheet.PivotTables("PivotTable1").PivotFields(" CIS CODE ")
-        .Orientation = xlRowField
-        .Position = 1
-    End With
-    With ActiveSheet.PivotTables("PivotTable1").PivotFields(" REVIEW STATUS ")
-        .Orientation = xlRowField
-        .Position = 2
-    End With
-    With ActiveSheet.PivotTables("PivotTable1").PivotFields(" SENT ? (Yes/No)")
-        .Orientation = xlRowField
-        .Position = 3
-    End With
-    With ActiveSheet.PivotTables("PivotTable1").PivotFields(" REASON")
-        .Orientation = xlRowField
-        .Position = 4
-    End With
-    ActiveSheet.PivotTables("PivotTable1").AddDataField ActiveSheet.PivotTables( _
-        "PivotTable1").PivotFields(" CIS CODE "), "Count of  CIS CODE ", xlCount
-    With ActiveSheet.PivotTables("PivotTable1").PivotFields(" SENT ? (Yes/No)")
-        .Orientation = xlColumnField
-        .Position = 1
-    End With
-    With ActiveSheet.PivotTables("PivotTable1").PivotFields(" REVIEW STATUS ")
-        .Orientation = xlRowField
-        .Position = 2
-    End With
-    Sheets("Sheet3").Select
-    Sheets("Sheet3").Name = "Analysis"
+    ActiveCell.FormulaR1C1 = "=R[-2]C-R[-1]C"
+    Range("G14").Select
+    ActiveCell.FormulaR1C1 = "=R[-1]C/R[-3]C*100"
+    Range("G16").Select
+    Application.CutCopyMode = False
+    ActiveCell.FormulaR1C1 = "=R[-14]C"
+    Range("G17").Select
+    ActiveCell.FormulaR1C1 = "=[23062025.xlsx]GBCLM_REPORT!R2C7"
+    Range("G18").Select
+    Application.CutCopyMode = False
+    ActiveCell.FormulaR1C1 = "=R[-2]C-R[-1]C"
+    Range("G19").Select
 End Sub
+
 
 
