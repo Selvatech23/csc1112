@@ -1,6 +1,6 @@
 Option Explicit
 
-Sub ProcessReport_Combined()
+Sub ProcessReport_Combined_Optimized()
 
     '==================================================================================
     '===[ SETUP ]======================================================================
@@ -11,6 +11,9 @@ Sub ProcessReport_Combined()
     Dim wsReport As Worksheet
     Set wsReport = ActiveSheet
     
+    ' Define the header row once. Data starts on the next row (22).
+    Const HeaderRow As Long = 21
+
     '==================================================================================
     '===[ STEP 1: PARSE AND PREPARE "GBCLM_REPORT" SHEET ]=============================
     '==================================================================================
@@ -27,11 +30,10 @@ Sub ProcessReport_Combined()
                                       Other:=True, _
                                       OtherChar:="|"
 
-    '--- CORRECTED BASED ON YOUR FEEDBACK ---
-    ' Action 1.2: The line that deleted Column A has been REMOVED.
-    ' The column containing the "FEN-" values is now correctly preserved in Column A.
+    ' Action 1.2: Delete the first column of data after the split.
+    wsReport.Columns("A:A").Delete
     
-    ' Action 1.3: Autofit column widths immediately after parsing
+    ' Action 1.3: Autofit column widths
     wsReport.Cells.EntireColumn.AutoFit
     
     ' Action 1.4: Rename the worksheet to "GBCLM_REPORT"
@@ -50,13 +52,16 @@ Sub ProcessReport_Combined()
     
 
     '==================================================================================
-    '===[ STEP 2: CREATE "FEN Records" SHEET ]=========================================
+    '===[ STEP 2: CREATE "FEN Records" SHEET (OPTIMIZED) ]=============================
     '==================================================================================
+    ' This new method uses AutoFilter. It is much faster and more reliable
+    ' than copying row-by-row, and it prevents clipboard errors.
     
     Dim wsFEN As Worksheet
     Dim lastRow As Long
-    Dim i As Long
-    Dim nextPasteRow As Long
+    Dim lastCol As Long
+    Dim filterRange As Range
+    Dim visibleData As Range
     
     ' Action 2.1: Prepare the "FEN Records" sheet (delete if it exists, then create new)
     Application.DisplayAlerts = False
@@ -68,42 +73,47 @@ Sub ProcessReport_Combined()
     Set wsFEN = ThisWorkbook.Worksheets.Add(After:=wsReport)
     wsFEN.Name = "FEN Records"
     
-    ' Action 2.2: Copy the specific header range (A21:E21) to the new sheet
-    wsReport.Range("A21:E21").Copy Destination:=wsFEN.Range("A1")
-    
-    ' Action 2.3: Loop through data and copy rows that match the criteria
-    ' Find the last row with data in Column A of the report sheet
+    ' Action 2.2: Identify the full data range on the report sheet
     lastRow = wsReport.Cells(wsReport.Rows.Count, "A").End(xlUp).Row
+    ' Find the last column based on the header row
+    lastCol = wsReport.Cells(HeaderRow, wsReport.Columns.Count).End(xlToLeft).Column
     
-    ' The first row to paste data into on the FEN sheet will be row 2
-    nextPasteRow = 2
+    ' Check if there is data to filter
+    If lastRow <= HeaderRow Then
+        MsgBox "No data found below row 21 to filter.", vbInformation
+        wsReport.Activate
+        Application.ScreenUpdating = True
+        Exit Sub
+    End If
     
-    ' Loop from the first data row (22) to the last row
-    For i = 22 To lastRow
-        ' Check if the cell value in Column A starts with "FEN-".
-        If wsReport.Cells(i, "A").Value Like "FEN-*" Then
-            
-            ' If it matches, copy the associated values from that row (Columns A to E)
-            wsReport.Range("A" & i & ":E" & i).Copy Destination:=wsFEN.Range("A" & nextPasteRow)
-            
-            ' Increment the counter for the next paste location
-            nextPasteRow = nextPasteRow + 1
-        End If
-    Next i
+    ' Define the range to be filtered (includes headers and all data)
+    Set filterRange = wsReport.Range(wsReport.Cells(HeaderRow, 1), wsReport.Cells(lastRow, lastCol))
     
-    ' Action 2.4: Check if any records were copied and then format the sheet
-    If nextPasteRow > 2 Then
-        ' Records were found and copied, so autofit the columns on the new sheet
-        wsFEN.Cells.EntireColumn.AutoFit
+    ' Action 2.3: Apply the filter
+    wsReport.AutoFilterMode = False ' Clear any previous filters
+    ' Filter on the 1st column of our range (Column A) for values starting with "FEN-"
+    filterRange.AutoFilter Field:=1, Criteria1:="FEN-*"
+    
+    ' Action 2.4: Copy all visible (filtered) cells in ONE operation
+    On Error Resume Next
+    Set visibleData = filterRange.SpecialCells(xlCellTypeVisible)
+    On Error GoTo 0
+    
+    If Not visibleData Is Nothing And visibleData.Rows.Count > 1 Then ' Check if more than just the header is visible
+        ' This is the single, fast copy operation
+        visibleData.Copy Destination:=wsFEN.Range("A1")
+        wsFEN.Cells.EntireColumn.AutoFit ' Autofit the new sheet
     Else
-        ' No records were found, inform the user and delete the empty sheet
-        MsgBox "No records starting with 'FEN-' were found in Column A.", vbInformation
+        ' No "FEN-" records were found
+        MsgBox "No records starting with 'FEN-' were found.", vbInformation
         Application.DisplayAlerts = False
-        wsFEN.Delete
+        wsFEN.Delete ' Delete the empty sheet
         Application.DisplayAlerts = True
     End If
     
-    ' Bring the main report sheet back into view
+    ' Action 2.5: IMPORTANT - Always remove the filter from your source sheet
+    wsReport.AutoFilterMode = False
+    
     wsReport.Activate
 
     '==================================================================================
@@ -111,8 +121,8 @@ Sub ProcessReport_Combined()
     '==================================================================================
 
     Application.ScreenUpdating = True
-    MsgBox "Process complete!" & vbCrLf & vbCrLf & _
+    MsgBox "Optimized process complete!" & vbCrLf & vbCrLf & _
            "Step 1: Data parsed on 'GBCLM_REPORT' sheet." & vbCrLf & _
-           "Step 2: 'FEN Records' sheet created with specific data.", vbInformation
+           "Step 2: 'FEN Records' sheet created instantly.", vbInformation
 
 End Sub
