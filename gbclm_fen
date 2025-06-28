@@ -27,8 +27,9 @@ Sub ProcessReport_Combined()
                                       Other:=True, _
                                       OtherChar:="|"
 
-    ' Action 1.2: Delete the now-empty first column
-    wsReport.Columns("A:A").Delete
+    '--- CORRECTED BASED ON YOUR FEEDBACK ---
+    ' Action 1.2: The line that deleted Column A has been REMOVED.
+    ' The column containing the "FEN-" values is now correctly preserved in Column A.
     
     ' Action 1.3: Autofit column widths immediately after parsing
     wsReport.Cells.EntireColumn.AutoFit
@@ -49,7 +50,7 @@ Sub ProcessReport_Combined()
     
 
     '==================================================================================
-    '===[ STEP 2: CREATE "FEN Records" SHEET (NEW LOGIC) ]=============================
+    '===[ STEP 2: CREATE "FEN Records" SHEET ]=========================================
     '==================================================================================
     
     Dim wsFEN As Worksheet
@@ -80,13 +81,12 @@ Sub ProcessReport_Combined()
     ' Loop from the first data row (22) to the last row
     For i = 22 To lastRow
         ' Check if the cell value in Column A starts with "FEN-".
-        ' The "Like" operator with a wildcard "*" is perfect for this.
         If wsReport.Cells(i, "A").Value Like "FEN-*" Then
             
             ' If it matches, copy the associated values from that row (Columns A to E)
             wsReport.Range("A" & i & ":E" & i).Copy Destination:=wsFEN.Range("A" & nextPasteRow)
             
-            ' Increment the counter for the next paste location on the "FEN Records" sheet
+            ' Increment the counter for the next paste location
             nextPasteRow = nextPasteRow + 1
         End If
     Next i
