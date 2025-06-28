@@ -1,6 +1,6 @@
-=Option Explicit
+Option Explicit
 
-Sub ProcessReport_Final_And_Correct()
+Sub ProcessReport_Steps_1_and_2_Simple()
 
     '==================================================================================
     '===[ SETUP ]======================================================================
@@ -11,10 +11,8 @@ Sub ProcessReport_Final_And_Correct()
     Dim wsReport As Worksheet
     Set wsReport = ActiveSheet
     
-    Const HeaderRow As Long = 21 ' The row where headers like "CIS CODE" are located
-
     '==================================================================================
-    '===[ STEP 1: PARSE, CLEAN, AND PREPARE "GBCLM_REPORT" SHEET ]======================
+    '===[ STEP 1: PARSE AND PREPARE "GBCLM_REPORT" SHEET (AS APPROVED) ]===============
     '==================================================================================
     
     ' Action 1.1: Parse data in Column A using "|" as the delimiter
@@ -32,27 +30,17 @@ Sub ProcessReport_Final_And_Correct()
     ' Action 1.2: Delete the first column of data after the split.
     wsReport.Columns("A:A").Delete
     
-    '--- THE CRITICAL FIX IS HERE ---
-    ' Action 1.3: Clean the new Column A to remove all leading/trailing spaces.
-    ' This ensures the filter will find "FEN-" even if there are hidden spaces like " FEN-".
-    Dim lastDataRow As Long
-    Dim dataToClean As Range
-    lastDataRow = wsReport.Cells(wsReport.Rows.Count, "A").End(xlUp).Row
-    If lastDataRow > 0 Then
-        Set dataToClean = wsReport.Range("A1:A" & lastDataRow)
-        ' This is a very fast way to apply the TRIM function to the whole column at once.
-        dataToClean.Value = Application.WorksheetFunction.Trim(dataToClean)
-    End If
-    
-    ' Action 1.4: Autofit column widths
+    ' Action 1.3: Autofit column widths
     wsReport.Cells.EntireColumn.AutoFit
     
-    ' Action 1.5: Rename the worksheet to "GBCLM_REPORT"
+    ' Action 1.4: Rename the worksheet to "GBCLM_REPORT"
     If wsReport.Name <> "GBCLM_REPORT" Then
         On Error Resume Next
         wsReport.Name = "GBCLM_REPORT"
         If Err.Number <> 0 Then
-            MsgBox "Could not rename the sheet to 'GBCLM_REPORT'. Aborting.", vbCritical
+            MsgBox "Could not rename the sheet to 'GBCLM_REPORT'." & vbCrLf & _
+                   "Another sheet may already have that name. Aborting macro.", vbCritical
+            Err.Clear
             Application.ScreenUpdating = True
             Exit Sub
         End If
@@ -61,15 +49,12 @@ Sub ProcessReport_Final_And_Correct()
     
 
     '==================================================================================
-    '===[ STEP 2: CREATE "FEN Records" SHEET (USING THE CLEANED DATA) ]================
+    '===[ STEP 2: CREATE SHEET AND COPY HEADERS ONLY ]=================================
     '==================================================================================
     
     Dim wsFEN As Worksheet
-    Dim lastCol As Long
-    Dim filterRange As Range
-    Dim visibleData As Range
     
-    ' Action 2.1: Prepare the "FEN Records" sheet
+    ' Action 2.1: Prepare the "FEN Records" sheet (delete if it exists, then create new)
     Application.DisplayAlerts = False
     On Error Resume Next
     ThisWorkbook.Worksheets("FEN Records").Delete
@@ -79,39 +64,22 @@ Sub ProcessReport_Final_And_Correct()
     Set wsFEN = ThisWorkbook.Worksheets.Add(After:=wsReport)
     wsFEN.Name = "FEN Records"
     
-    ' Action 2.2: Identify the full data range (using the already found lastDataRow)
-    lastCol = wsReport.Cells(HeaderRow, wsReport.Columns.Count).End(xlToLeft).Column
+    ' Action 2.2: Copy ONLY the header range (A21:E21) to the new sheet
+    wsReport.Range("A21:E21").Copy Destination:=wsFEN.Range("A1")
     
-    ' Action 2.3: Apply the filter (this will now work on the cleaned data)
-    wsReport.AutoFilterMode = False ' Clear any previous filters
-    Set filterRange = wsReport.Range(wsReport.Cells(HeaderRow, 1), wsReport.Cells(lastDataRow, lastCol))
-    filterRange.AutoFilter Field:=1, Criteria1:="FEN-*"
+    ' Action 2.3: Autofit the columns on the new sheet so the headers are readable
+    wsFEN.Cells.EntireColumn.AutoFit
     
-    ' Action 2.4: Copy all visible (filtered) cells in ONE operation
-    On Error Resume Next
-    Set visibleData = filterRange.SpecialCells(xlCellTypeVisible)
-    On Error GoTo 0
-    
-    If Not visibleData Is Nothing And visibleData.Areas(1).Rows.Count > 1 Then
-        visibleData.Copy Destination:=wsFEN.Range("A1")
-        wsFEN.Cells.EntireColumn.AutoFit
-    Else
-        MsgBox "No records starting with 'FEN-' were found after cleaning the data.", vbInformation
-        Application.DisplayAlerts = False
-        wsFEN.Delete
-        Application.DisplayAlerts = True
-    End If
-    
-    ' Action 2.5: IMPORTANT - Always remove the filter from your source sheet
-    wsReport.AutoFilterMode = False
-    
-    wsReport.Activate
+    ' Action 2.4: Leave the new sheet active so you can see the result
+    wsFEN.Activate
 
     '==================================================================================
     '===[ FINISH ]=====================================================================
     '==================================================================================
 
     Application.ScreenUpdating = True
-    MsgBox "Process complete. Data has been cleaned and filtered successfully.", vbInformation
+    MsgBox "Process complete." & vbCrLf & vbCrLf & _
+           "Step 1: 'GBCLM_REPORT' sheet prepared." & vbCrLf & _
+           "Step 2: 'FEN Records' sheet created with headers only.", vbInformation
 
 End Sub
