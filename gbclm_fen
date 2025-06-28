@@ -1,6 +1,6 @@
 Option Explicit
 
-Sub ProcessReport_Steps_1_to_4()
+Sub ProcessReport_Steps_1_to_5()
 
     '==================================================================================
     '===[ SETUP ]======================================================================
@@ -12,8 +12,10 @@ Sub ProcessReport_Steps_1_to_4()
     Set reportWB = ActiveWorkbook
     
     Dim wsReport As Worksheet
-    Set wsReport = reportWB.ActiveSheet
+    Set wsReport = reportWB.Worksheets("GBCLM_REPORT") ' We will get a direct reference later
     
+    ' Start on the active sheet
+    Set wsReport = reportWB.ActiveSheet
     
     '==================================================================================
     '===[ STEP 1: PARSE AND PREPARE "GBCLM_REPORT" SHEET (UNTOUCHED) ]=================
@@ -40,6 +42,9 @@ Sub ProcessReport_Steps_1_to_4()
         End If
         On Error GoTo 0
     End If
+    
+    ' After renaming, we get a fresh reference to the sheet by its proper name
+    Set wsReport = reportWB.Worksheets("GBCLM_REPORT")
     
 
     '==================================================================================
@@ -72,7 +77,6 @@ Sub ProcessReport_Steps_1_to_4()
     lastRow = wsReport.Cells(wsReport.Rows.Count, "A").End(xlUp).Row
     
     If lastRow > 21 Then
-        ' Note: The TRIM function line was removed as per your successful test.
         Set filterRange = wsReport.Range("A21:E" & lastRow)
         wsReport.AutoFilterMode = False
         filterRange.AutoFilter Field:=1, Criteria1:="FEN-*"
@@ -91,13 +95,11 @@ Sub ProcessReport_Steps_1_to_4()
         wsReport.AutoFilterMode = False
     End If
     
-    wsFEN.Activate
 
     '==================================================================================
-    '===[ STEP 4: ADD STATIC LABELS TO GBCLM_REPORT SHEET ]============================
+    '===[ STEP 4: ADD STATIC LABELS TO GBCLM_REPORT SHEET (UNTOUCHED) ]================
     '==================================================================================
     
-    ' Pasting the specified text labels into column C of the main report sheet.
     wsReport.Range("C2").Value = "Total Number of Individual Customers in Fenergo Database"
     wsReport.Range("C3").Value = "Total No. of Customers Excluded from Screening from Fenergo Database"
     wsReport.Range("C4").Value = "1 CIS with only existing inflight NCTO/RRA Reason. No valid review"
@@ -105,7 +107,7 @@ Sub ProcessReport_Steps_1_to_4()
     wsReport.Range("C6").Value = "3. Unassigned / No review exist(s)"
     wsReport.Range("C7").Value = "4. Technical Issue(s) occurred in Fenergo Database"
     wsReport.Range("C8").Value = "Total No. of Customers Sent to Screening from Fenergo Database"
-    wsReport.Range("C9").Value = "Difference Between Total and Combination of Excluded & Included" ' Simplified for space
+    wsReport.Range("C9").Value = "Difference Between Total and Combination of Excluded & Included"
     
     wsReport.Range("C11").Value = "No. of Customers Excluded from Screening from Fenergo Database (In Today's report)"
     wsReport.Range("C12").Value = "No. of Customers Excluded from Screening from Fenergo Database (In Previous day report)"
@@ -116,8 +118,67 @@ Sub ProcessReport_Steps_1_to_4()
     wsReport.Range("C17").Value = "Total Number of Individual Customers in Fenergo Database (In Previous day report)"
     wsReport.Range("C18").Value = "Net Change in Total Number of Individual Customers"
     
-    ' Autofit the width of column C to make sure all the text is visible.
     wsReport.Columns("C:C").AutoFit
+    
+    
+    '==================================================================================
+    '===[ STEP 5: CREATE "UNIQUE CIS" SHEET ]==========================================
+    '==================================================================================
+    
+    Dim wsUniqueCIS As Worksheet
+    Dim sourceRange As Range
+    Dim dataArray As Variant
+    Dim uniqueDict As Object
+    Dim i As Long
+    Dim cleanedItem As String
+    
+    ' Action 5.1: Create the new sheet.
+    Application.DisplayAlerts = False
+    On Error Resume Next
+    reportWB.Worksheets("Unique CIS").Delete
+    On Error GoTo 0
+    Application.DisplayAlerts = True
+    
+    Set wsUniqueCIS = reportWB.Worksheets.Add(After:=wsFEN)
+    wsUniqueCIS.Name = "Unique CIS"
+    
+    ' Action 5.2: Format the header.
+    With wsUniqueCIS.Range("A1")
+        .Value = "CIS CODE"
+        .Interior.Color = RGB(173, 216, 230) ' Light Blue color
+    End With
+    
+    ' Action 5.3: Process the data in memory.
+    If lastRow > 21 Then
+        ' Read the entire source data column into a VBA array for speed.
+        Set sourceRange = wsReport.Range("A22:A" & lastRow)
+        dataArray = sourceRange.Value
+        
+        ' Use a Dictionary to store unique values.
+        Set uniqueDict = CreateObject("Scripting.Dictionary")
+        
+        ' Loop through the array, clean the data, and add to the dictionary.
+        For i = 1 To UBound(dataArray, 1)
+            ' Replace "FEN-" and then Trim spaces.
+            cleanedItem = Trim(Replace(dataArray(i, 1), "FEN-", ""))
+            
+            ' Add to dictionary only if it's not a blank string and not already there.
+            If cleanedItem <> "" Then
+                uniqueDict(cleanedItem) = 1 ' The value '1' is just a placeholder.
+            End If
+        Next i
+        
+        ' Action 5.4: Paste the unique results to the new sheet.
+        If uniqueDict.Count > 0 Then
+            wsUniqueCIS.Range("A2").Resize(uniqueDict.Count, 1).Value = Application.Transpose(uniqueDict.Keys)
+        Else
+            wsUniqueCIS.Range("A2").Value = "No valid CIS Codes found after cleaning."
+        End If
+    End If
+    
+    ' Action 5.5: Autofit the final column and activate the sheet.
+    wsUniqueCIS.Columns("A:A").AutoFit
+    wsUniqueCIS.Activate
     
 
     '==================================================================================
@@ -127,8 +188,9 @@ Sub ProcessReport_Steps_1_to_4()
     Application.ScreenUpdating = True
     MsgBox "Process complete!" & vbCrLf & vbCrLf & _
            "Step 1: 'GBCLM_REPORT' prepared." & vbCrLf & _
-           "Step 2: 'FEN Records' sheet created with headers." & vbCrLf & _
-           "Step 3: 'FEN-' data copied successfully." & vbCrLf & _
-           "Step 4: Summary labels added to GBCLM_REPORT.", vbInformation
+           "Step 2: 'FEN Records' sheet created." & vbCrLf & _
+           "Step 3: 'FEN-' data copied." & vbCrLf & _
+           "Step 4: Summary labels added." & vbCrLf & _
+           "Step 5: 'Unique CIS' sheet created successfully.", vbInformation
 
 End Sub
