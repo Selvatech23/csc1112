@@ -1,0 +1,49 @@
+Sub Run_Step_7_Separately()
+
+    Dim reportWB As Workbook
+    Set reportWB = ActiveWorkbook
+    
+    Dim wsReport As Worksheet
+    On Error Resume Next
+    Set wsReport = reportWB.Worksheets("GBCLM_REPORT")
+    On Error GoTo 0
+    
+    If wsReport Is Nothing Then
+        MsgBox "Could not find the 'GBCLM_REPORT' sheet. Please run the main macro first.", vbCritical
+        Exit Sub
+    End If
+    
+    Application.ScreenUpdating = False
+    
+    Dim lastRow As Long
+    lastRow = wsReport.Cells(wsReport.Rows.Count, "A").End(xlUp).Row
+    
+    Dim wsSpace As Worksheet
+    
+    Application.DisplayAlerts = False
+    On Error Resume Next
+    reportWB.Worksheets("Space issue").Delete
+    On Error GoTo 0
+    Application.DisplayAlerts = True
+    
+    Set wsSpace = reportWB.Worksheets.Add(After:=reportWB.Sheets(reportWB.Sheets.Count))
+    wsSpace.Name = "Space issue"
+    
+    If lastRow > 21 Then
+        wsReport.Range("A22:A" & lastRow).Copy Destination:=wsSpace.Range("A1")
+        
+        With wsSpace.Columns("A:A")
+            .Replace What:="FEN-", Replacement:="", LookAt:=xlPart, MatchCase:=False
+            .RemoveDuplicates Columns:=1, Header:=xlNo
+        End With
+        
+        wsSpace.Range("B1").Value = "STATUS"
+        wsSpace.Cells.EntireColumn.AutoFit
+        wsSpace.Activate
+    End If
+
+    Application.ScreenUpdating = True
+    
+    MsgBox "The 'Space issue' sheet is ready for your manual VLOOKUP.", vbInformation
+
+End Sub
