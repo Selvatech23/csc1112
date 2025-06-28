@@ -1,6 +1,6 @@
 Option Explicit
 
-Sub ProcessReport_Final_Diagnostic()
+Sub ProcessReport_Final_Working_Version()
 
     '==================================================================================
     '===[ SETUP ]======================================================================
@@ -98,11 +98,12 @@ Sub ProcessReport_Final_Diagnostic()
     End If
     
     '==================================================================================
-    '===[ STEP 6: DIAGNOSTIC VERSION ]=================================================
+    '===[ STEP 6: POPULATE DATA (WITH AUTOMATIC PATH FIX) ]============================
     '==================================================================================
     
-    Dim folderPath As String, wsHome As Worksheet
+    Dim prevDayValueC2 As Variant, prevDayValueC3 As Variant, folderPath As String, wsHome As Worksheet
     
+    '--- Part 1: Get path from 'Home' sheet and automatically fix it ---
     On Error Resume Next
     Set wsHome = macroWB.Worksheets("Home")
     On Error GoTo 0
@@ -111,7 +112,18 @@ Sub ProcessReport_Final_Diagnostic()
     folderPath = wsHome.Range("E10").Value
     If folderPath = "" Then GoTo EndMacro
     
-    Dim prevDayPath As String, prevDayDate As Date
+    '--- THE PERMANENT FIX IS HERE ---
+    ' Check if the user entered a full file path by mistake. If so, strip the filename.
+    If Right(LCase(folderPath), 5) = ".xlsx" Or Right(LCase(folderPath), 5) = ".xlsm" Then
+        folderPath = Left(folderPath, InStrRev(folderPath, "\") - 1)
+    End If
+    '--- END OF FIX ---
+    
+    '--- Part 2: Find and Open Previous Day's File ---
+    Dim prevDayPath As String, prevDayDate As Date, prevDayWB As Workbook
+    prevDayValueC2 = 0
+    prevDayValueC3 = 0
+
     If Right(folderPath, 1) <> "\" Then folderPath = folderPath & "\"
     prevDayDate = Date - 1
     Do While Weekday(prevDayDate, vbMonday) > 5
@@ -119,20 +131,43 @@ Sub ProcessReport_Final_Diagnostic()
     Loop
     prevDayPath = folderPath & Format(prevDayDate, "ddmmyyyy") & ".xlsx"
     
-    '******************************************************************
-    '*** THE ONLY CHANGE IS THIS MESSAGE BOX. PLEASE COPY ITS OUTPUT. ***
-    '******************************************************************
-    MsgBox "The macro is about to check for this exact file path:" & vbCrLf & vbCrLf & _
-           "'" & prevDayPath & "'", vbInformation, "DEBUG: Checking File Path"
-    '******************************************************************
-    
     If Dir(prevDayPath) <> "" Then
-        ' The rest of the code would go here...
-    Else
-        ' ...
+        Set prevDayWB = Workbooks.Open(prevDayPath, ReadOnly:=True)
+        prevDayValueC2 = prevDayWB.Worksheets("GBCLM_REPORT").Range("G2").Value
+        prevDayValueC3 = prevDayWB.Worksheets("GBCLM_REPORT").Range("G3").Value
+        prevDayWB.Close SaveChanges:=False
     End If
 
-EndMacro: ' Clean exit point
+    '--- Part 3: Populate Column G ---
+    Dim fenLastRow As Long, fenSentCol As String
+    fenLastRow = wsFEN.Cells(wsFEN.Rows.Count, "A").End(xlUp).Row
+    fenSentCol = "D"
+    
+    With wsReport
+        .Range("G2").Formula = "=COUNTA('FEN Records'!A2:A" & fenLastRow & ")"
+        .Range("G3").Formula = "=COUNTIF('FEN Records'!" & fenSentCol & ":" & fenSentCol & ",""No"")"
+        .Range("G4").Formula = "=COUNTIF('FEN Records'!" & fenSentCol & ":" & fenSentCol & ",""No"")"
+        .Range("G5").Value = 0: .Range("G6").Value = 0: .Range("G7").Value = 0
+        .Range("G8").Formula = "=COUNTIF('FEN Records'!" & fenSentCol & ":" & fenSentCol & ",""Yes"")"
+        .Range("G9").Formula = "=G2-(G3+G8)"
+        .Range("G11").Formula = "=G3"
+        .Range("G12").Value = prevDayValueC3
+        .Range("G13").Formula = "=G11-G12"
+        .Range("G14").Formula = "=IFERROR(G13/G11,0)"
+        .Range("G14").NumberFormat = "0.00%"
+        .Range("G16").Formula = "=G2"
+        .Range("G17").Value = prevDayValueC2
+        .Range("G18").Formula = "=G16-G17"
+        .Columns("G:G").AutoFit
+        .Activate
+    End With
+
+EndMacro:
+    '==================================================================================
+    '===[ FINISH ]=====================================================================
+    '==================================================================================
+    
     Application.ScreenUpdating = True
+    MsgBox "Process complete! Steps 1 to 6 have been successfully executed.", vbInformation
 
 End Sub
