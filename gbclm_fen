@@ -1,6 +1,6 @@
 Option Explicit
 
-Sub ProcessReport_Steps_1_2_and_3()
+Sub ProcessReport_Steps_1_to_4()
 
     '==================================================================================
     '===[ SETUP ]======================================================================
@@ -62,54 +62,63 @@ Sub ProcessReport_Steps_1_2_and_3()
     
 
     '==================================================================================
-    '===[ STEP 3: FILTER, COPY, AND PASTE "FEN-" DATA ]================================
+    '===[ STEP 3: FILTER, COPY, AND PASTE "FEN-" DATA (UNTOUCHED) ]====================
     '==================================================================================
     
     Dim lastRow As Long
     Dim filterRange As Range
     Dim dataToCopy As Range
     
-    ' Action 3.1: Find the last row of data on the GBCLM_REPORT sheet.
     lastRow = wsReport.Cells(wsReport.Rows.Count, "A").End(xlUp).Row
     
-    ' Only proceed if there is data below the header (row 21).
     If lastRow > 21 Then
-    
-        ' Action 3.2 (Crucial for reliability): Silently clean Column A data to remove hidden spaces.
-        ' This ensures the filter "FEN-*" will always work correctly.
-        Dim rangeToClean As Range
-        Set rangeToClean = wsReport.Range("A22:A" & lastRow)
-        rangeToClean.Value = Application.WorksheetFunction.Trim(rangeToClean)
-    
-        ' Action 3.3: Define the full range to filter (A21:E<lastRow>).
+        ' Note: The TRIM function line was removed as per your successful test.
         Set filterRange = wsReport.Range("A21:E" & lastRow)
-        
-        ' Action 3.4: Apply the filter to find rows where Column A starts with "FEN-".
-        wsReport.AutoFilterMode = False ' Clear any previous filters.
+        wsReport.AutoFilterMode = False
         filterRange.AutoFilter Field:=1, Criteria1:="FEN-*"
         
-        ' Action 3.5: Identify only the visible data rows (excluding the header).
-        On Error Resume Next ' Handles case where filter finds nothing.
+        On Error Resume Next
         Set dataToCopy = filterRange.Offset(1, 0).SpecialCells(xlCellTypeVisible)
         On Error GoTo 0
         
-        ' Action 3.6: Copy the found data to the "FEN Records" sheet.
         If Not dataToCopy Is Nothing Then
             dataToCopy.Copy Destination:=wsFEN.Range("A2")
-            ' Autofit the columns again now that the data is pasted.
             wsFEN.Cells.EntireColumn.AutoFit
         Else
-            ' Optional: Note if no records were found.
             wsFEN.Range("A2").Value = "No 'FEN-' records were found in the report."
         End If
         
-        ' Action 3.7: IMPORTANT - Remove the filter from the GBCLM_REPORT sheet.
         wsReport.AutoFilterMode = False
-        
-    End If ' End of check for data (If lastRow > 21)
+    End If
     
-    ' Action 3.8: Make sure the final FEN Records sheet is active for the user to see.
     wsFEN.Activate
+
+    '==================================================================================
+    '===[ STEP 4: ADD STATIC LABELS TO GBCLM_REPORT SHEET ]============================
+    '==================================================================================
+    
+    ' Pasting the specified text labels into column C of the main report sheet.
+    wsReport.Range("C2").Value = "Total Number of Individual Customers in Fenergo Database"
+    wsReport.Range("C3").Value = "Total No. of Customers Excluded from Screening from Fenergo Database"
+    wsReport.Range("C4").Value = "1 CIS with only existing inflight NCTO/RRA Reason. No valid review"
+    wsReport.Range("C5").Value = "02 CIS with only existing Cancelled. Reason: No valid review"
+    wsReport.Range("C6").Value = "3. Unassigned / No review exist(s)"
+    wsReport.Range("C7").Value = "4. Technical Issue(s) occurred in Fenergo Database"
+    wsReport.Range("C8").Value = "Total No. of Customers Sent to Screening from Fenergo Database"
+    wsReport.Range("C9").Value = "Difference Between Total and Combination of Excluded & Included" ' Simplified for space
+    
+    wsReport.Range("C11").Value = "No. of Customers Excluded from Screening from Fenergo Database (In Today's report)"
+    wsReport.Range("C12").Value = "No. of Customers Excluded from Screening from Fenergo Database (In Previous day report)"
+    wsReport.Range("C13").Value = "Change in no. of Customers Excluded from Screening"
+    wsReport.Range("C14").Value = "Change in no of Customers Excluded from Screening (In Percentage)"
+    
+    wsReport.Range("C16").Value = "Total Number of Individual Customers in Fenergo Database (In Today's report)"
+    wsReport.Range("C17").Value = "Total Number of Individual Customers in Fenergo Database (In Previous day report)"
+    wsReport.Range("C18").Value = "Net Change in Total Number of Individual Customers"
+    
+    ' Autofit the width of column C to make sure all the text is visible.
+    wsReport.Columns("C:C").AutoFit
+    
 
     '==================================================================================
     '===[ FINISH ]=====================================================================
@@ -119,6 +128,7 @@ Sub ProcessReport_Steps_1_2_and_3()
     MsgBox "Process complete!" & vbCrLf & vbCrLf & _
            "Step 1: 'GBCLM_REPORT' prepared." & vbCrLf & _
            "Step 2: 'FEN Records' sheet created with headers." & vbCrLf & _
-           "Step 3: 'FEN-' data copied successfully.", vbInformation
+           "Step 3: 'FEN-' data copied successfully." & vbCrLf & _
+           "Step 4: Summary labels added to GBCLM_REPORT.", vbInformation
 
 End Sub
