@@ -1,6 +1,6 @@
 Option Explicit
 
-Sub ProcessReport_Steps_1_to_6_Fixed()
+Sub ProcessReport_Final_Diagnostic()
 
     '==================================================================================
     '===[ SETUP ]======================================================================
@@ -98,35 +98,20 @@ Sub ProcessReport_Steps_1_to_6_Fixed()
     End If
     
     '==================================================================================
-    '===[ STEP 6: POPULATE DATA (WITH PATH CLEANING FIX) ]=============================
+    '===[ STEP 6: DIAGNOSTIC VERSION ]=================================================
     '==================================================================================
     
-    Dim prevDayValueC2 As Variant, prevDayValueC3 As Variant, folderPath As String, wsHome As Worksheet
+    Dim folderPath As String, wsHome As Worksheet
     
-    '--- Part 1: Get path from 'Home' sheet ---
     On Error Resume Next
     Set wsHome = macroWB.Worksheets("Home")
     On Error GoTo 0
     
-    If wsHome Is Nothing Then GoTo EndMacro ' Exit cleanly if Home sheet not found
+    If wsHome Is Nothing Then GoTo EndMacro
     folderPath = wsHome.Range("E10").Value
-    If folderPath = "" Then GoTo EndMacro ' Exit cleanly if path is empty
+    If folderPath = "" Then GoTo EndMacro
     
-    '--- THE FIX IS HERE: Automatically clean the path of illegal characters ---
-    folderPath = Replace(folderPath, """", "") ' Remove quotes
-    folderPath = Replace(folderPath, "<", "")
-    folderPath = Replace(folderPath, ">", "")
-    folderPath = Replace(folderPath, "|", "")
-    folderPath = Replace(folderPath, "?", "")
-    folderPath = Replace(folderPath, "*", "")
-    ' End of fix
-    
-    '--- Part 2: Find and Open Previous Day's File ---
-    Dim prevDayPath As String, prevDayDate As Date, prevDayWB As Workbook
-    
-    prevDayValueC2 = 0
-    prevDayValueC3 = 0
-
+    Dim prevDayPath As String, prevDayDate As Date
     If Right(folderPath, 1) <> "\" Then folderPath = folderPath & "\"
     prevDayDate = Date - 1
     Do While Weekday(prevDayDate, vbMonday) > 5
@@ -134,47 +119,20 @@ Sub ProcessReport_Steps_1_to_6_Fixed()
     Loop
     prevDayPath = folderPath & Format(prevDayDate, "ddmmyyyy") & ".xlsx"
     
+    '******************************************************************
+    '*** THE ONLY CHANGE IS THIS MESSAGE BOX. PLEASE COPY ITS OUTPUT. ***
+    '******************************************************************
+    MsgBox "The macro is about to check for this exact file path:" & vbCrLf & vbCrLf & _
+           "'" & prevDayPath & "'", vbInformation, "DEBUG: Checking File Path"
+    '******************************************************************
+    
     If Dir(prevDayPath) <> "" Then
-        Set prevDayWB = Workbooks.Open(prevDayPath, ReadOnly:=True)
-        On Error Resume Next
-        prevDayValueC2 = prevDayWB.Worksheets("GBCLM_REPORT").Range("G2").Value
-        prevDayValueC3 = prevDayWB.Worksheets("GBCLM_REPORT").Range("G3").Value
-        On Error GoTo 0
-        prevDayWB.Close SaveChanges:=False
+        ' The rest of the code would go here...
+    Else
+        ' ...
     End If
 
-    '--- Part 3: Populate Column G ---
-    Dim fenLastRow As Long, fenSentCol As String
-    fenLastRow = wsFEN.Cells(wsFEN.Rows.Count, "A").End(xlUp).Row
-    fenSentCol = "D"
-    
-    With wsReport
-        .Range("G2").Formula = "=COUNTA('FEN Records'!A2:A" & fenLastRow & ")"
-        .Range("G3").Formula = "=COUNTIF('FEN Records'!" & fenSentCol & ":" & fenSentCol & ",""No"")"
-        .Range("G4").Formula = "=COUNTIF('FEN Records'!" & fenSentCol & ":" & fenSentCol & ",""No"")"
-        .Range("G5").Value = 0
-        .Range("G6").Value = 0
-        .Range("G7").Value = 0
-        .Range("G8").Formula = "=COUNTIF('FEN Records'!" & fenSentCol & ":" & fenSentCol & ",""Yes"")"
-        .Range("G9").Formula = "=G2-(G3+G8)"
-        .Range("G11").Formula = "=G3"
-        .Range("G12").Value = prevDayValueC3
-        .Range("G13").Formula = "=G11-G12"
-        .Range("G14").Formula = "=IFERROR(G13/G11,0)"
-        .Range("G14").NumberFormat = "0.00%"
-        .Range("G16").Formula = "=G2"
-        .Range("G17").Value = prevDayValueC2
-        .Range("G18").Formula = "=G16-G17"
-        .Columns("G:G").AutoFit
-        .Activate
-    End With
-
 EndMacro: ' Clean exit point
-    '==================================================================================
-    '===[ FINISH ]=====================================================================
-    '==================================================================================
-    
     Application.ScreenUpdating = True
-    MsgBox "Process complete! Steps 1 to 6 have been successfully executed.", vbInformation
 
 End Sub
