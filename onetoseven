@@ -1,0 +1,205 @@
+Option Explicit
+
+Sub ProcessReport_Steps_1_to_7()
+
+    '==================================================================================
+    '===[ SETUP ]======================================================================
+    '==================================================================================
+    
+    Application.ScreenUpdating = False
+    
+    Dim reportWB As Workbook, macroWB As Workbook
+    Set reportWB = ActiveWorkbook
+    Set macroWB = ThisWorkbook
+    
+    Dim wsReport As Worksheet, wsFEN As Worksheet, wsUniqueCIS As Worksheet
+    Set wsReport = reportWB.ActiveSheet
+    
+    Dim lastRow As Long
+
+    '==================================================================================
+    '===[ STEPS 1-6 (THE STABLE, WORKING BASE) ]=======================================
+    '==================================================================================
+
+    '--- Step 1 ---
+    wsReport.Columns("A:A").TextToColumns Destination:=wsReport.Range("A1"), _
+                                      DataType:=xlDelimited, TextQualifier:=xlDoubleQuote, _
+                                      ConsecutiveDelimiter:=False, Tab:=False, Semicolon:=False, _
+                                      Comma:=False, Space:=False, Other:=True, OtherChar:="|"
+    wsReport.Columns("A:A").Delete
+    wsReport.Cells.EntireColumn.AutoFit
+    If wsReport.Name <> "GBCLM_REPORT" Then
+        On Error Resume Next
+        wsReport.Name = "GBCLM_REPORT"
+        If Err.Number <> 0 Then MsgBox "Could not rename sheet.", vbCritical: Err.Clear: Application.ScreenUpdating = True: Exit Sub
+        On Error GoTo 0
+    End If
+    Set wsReport = reportWB.Worksheets("GBCLM_REPORT")
+
+    '--- Step 2 ---
+    Application.DisplayAlerts = False: On Error Resume Next
+    reportWB.Worksheets("FEN Records").Delete
+    On Error GoTo 0: Application.DisplayAlerts = True
+    Set wsFEN = reportWB.Worksheets.Add(After:=wsReport)
+    wsFEN.Name = "FEN Records"
+    wsReport.Range("A21:E21").Copy wsFEN.Range("A1")
+    wsFEN.Cells.EntireColumn.AutoFit
+
+    '--- Step 3 ---
+    Dim filterRange As Range, dataToCopy As Range
+    lastRow = wsReport.Cells(wsReport.Rows.Count, "A").End(xlUp).Row
+    If lastRow > 21 Then
+        Set filterRange = wsReport.Range("A21:E" & lastRow)
+        wsReport.AutoFilterMode = False
+        filterRange.AutoFilter Field:=1, Criteria1:="FEN-*"
+        On Error Resume Next
+        Set dataToCopy = filterRange.Offset(1, 0).SpecialCells(xlCellTypeVisible)
+        On Error GoTo 0
+        If Not dataToCopy Is Nothing Then dataToCopy.Copy wsFEN.Range("A2"): wsFEN.Cells.EntireColumn.AutoFit
+        wsReport.AutoFilterMode = False
+    End If
+
+    '--- Step 4 ---
+    wsReport.Range("C2").Value = "Total Number of Individual Customers in Fenergo Database"
+    wsReport.Range("C3").Value = "Total No. of Customers Excluded from Screening from Fenergo Database"
+    wsReport.Range("C4").Value = "1 CIS with only existing inflight NCTO/RRA Reason. No valid review"
+    wsReport.Range("C5").Value = "02 CIS with only existing Cancelled. Reason: No valid review"
+    wsReport.Range("C6").Value = "3. Unassigned / No review exist(s)"
+    wsReport.Range("C7").Value = "4. Technical Issue(s) occurred in Fenergo Database"
+    wsReport.Range("C8").Value = "Total No. of Customers Sent to Screening from Fenergo Database"
+    wsReport.Range("C9").Value = "Difference Between Total and Combination of Excluded & Included"
+    wsReport.Range("C11").Value = "No. of Customers Excluded from Screening from Fenergo Database (In Today's report)"
+    wsReport.Range("C12").Value = "No. of Customers Excluded from Screening from Fenergo Database (In Previous day report)"
+    wsReport.Range("C13").Value = "Change in no. of Customers Excluded from Screening"
+    wsReport.Range("C14").Value = "Change in no of Customers Excluded from Screening (In Percentage)"
+    wsReport.Range("C16").Value = "Total Number of Individual Customers in Fenergo Database (In Today's report)"
+    wsReport.Range("C17").Value = "Total Number of Individual Customers in Fenergo Database (In Previous day report)"
+    wsReport.Range("C18").Value = "Net Change in Total Number of Individual Customers"
+    wsReport.Columns("C:C").AutoFit
+    
+    '--- Step 5 ---
+    If lastRow > 21 Then
+        Dim sourceRange As Range, uniqueLastRow As Long
+        Application.DisplayAlerts = False: On Error Resume Next
+        reportWB.Worksheets("Unique CIS").Delete
+        On Error GoTo 0: Application.DisplayAlerts = True
+        Set wsUniqueCIS = reportWB.Worksheets.Add(After:=wsFEN)
+        wsUniqueCIS.Name = "Unique CIS"
+        Set sourceRange = wsReport.Range("A22:A" & lastRow)
+        sourceRange.Copy wsUniqueCIS.Range("A1")
+        uniqueLastRow = wsUniqueCIS.Cells(wsUniqueCIS.Rows.Count, "A").End(xlUp).Row
+        wsUniqueCIS.Columns("A:A").Replace What:="fen-", Replacement:="", LookAt:=xlPart, MatchCase:=False
+        With wsUniqueCIS.Range("B1:B" & uniqueLastRow): .Formula = "=TRIM(A1)": .Value = .Value: End With
+        wsUniqueCIS.Range("A1:A" & uniqueLastRow).Value = wsUniqueCIS.Range("B1:B" & uniqueLastRow).Value
+        wsUniqueCIS.Columns("B").Delete: wsUniqueCIS.Columns("A:A").RemoveDuplicates Columns:=1, Header:=xlNo
+        wsUniqueCIS.Rows("1:1").Insert Shift:=xlDown
+        With wsUniqueCIS.Range("A1"): .Value = "CIS CODE": .Interior.Color = RGB(173, 216, 230): End With
+        wsUniqueCIS.Columns("A:A").AutoFit
+    End If
+    
+    '--- Step 6 (File Fetching logic) ---
+    Dim prevDayValueC2 As Variant, prevDayValueC3 As Variant, filePathFromCell As String, wsHome As Worksheet
+    On Error Resume Next
+    Set wsHome = macroWB.Worksheets("Home")
+    On Error GoTo 0
+    prevDayValueC2 = 0: prevDayValueC3 = 0
+    If wsHome Is Nothing Then
+        MsgBox "Config Error: 'Home' sheet not found.", vbCritical
+    Else
+        filePathFromCell = wsHome.Range("E10").Value
+        If Dir(filePathFromCell) <> "" Then
+            Dim prevDayWB As Workbook
+            Set prevDayWB = Workbooks.Open(filePathFromCell, ReadOnly:=True)
+            prevDayValueC2 = prevDayWB.Worksheets("GBCLM_REPORT").Range("G2").Value
+            prevDayValueC3 = prevDayWB.Worksheets("GBCLM_REPORT").Range("G3").Value
+            prevDayWB.Close SaveChanges:=False
+        End If
+    End If
+    Dim fenLastRow As Long, fenSentCol As String
+    fenLastRow = wsFEN.Cells(wsFEN.Rows.Count, "A").End(xlUp).Row
+    fenSentCol = "D"
+    With wsReport
+        .Range("G2").Formula = "=COUNTA('FEN Records'!A2:A" & fenLastRow & ")"
+        .Range("G3").Formula = "=COUNTIF('FEN Records'!" & fenSentCol & ":" & fenSentCol & ",""No"")"
+        .Range("G4").Formula = "=COUNTIF('FEN Records'!" & fenSentCol & ":" & fenSentCol & ",""No"")"
+        .Range("G5").Value = 0: .Range("G6").Value = 0: .Range("G7").Value = 0
+        .Range("G8").Formula = "=COUNTIF('FEN Records'!" & fenSentCol & ":" & fenSentCol & ",""Yes"")"
+        .Range("G9").Formula = "=G2-(G3+G8)"
+        .Range("G11").Formula = "=G3": .Range("G12").Value = prevDayValueC3
+        .Range("G13").Formula = "=G11-G12": .Range("G14").Formula = "=IFERROR(G13/G11,0)"
+        .Range("G14").NumberFormat = "0.00%": .Range("G16").Formula = "=G2"
+        .Range("G17").Value = prevDayValueC2: .Range("G18").Formula = "=G16-G17"
+        .Columns("G:G").AutoFit
+    End With
+    
+    '==================================================================================
+    '===[ NEW STEP 7: CREATE "Space issue" SHEET & VLOOKUP ]===========================
+    '==================================================================================
+    
+    Dim wsSpace As Worksheet
+    Dim spaceLastRow As Long
+    
+    ' Action 7.1: Create the "Space issue" sheet
+    Application.DisplayAlerts = False
+    On Error Resume Next
+    reportWB.Worksheets("Space issue").Delete
+    On Error GoTo 0
+    Application.DisplayAlerts = True
+    
+    Set wsSpace = reportWB.Worksheets.Add(After:=reportWB.Sheets(reportWB.Sheets.Count))
+    wsSpace.Name = "Space issue"
+    
+    ' Action 7.2: Add and format headers
+    With wsSpace.Range("A1")
+        .Value = "CIS CODE"
+        .Interior.Color = RGB(173, 216, 230) ' Light Blue
+    End With
+    With wsSpace.Range("B1")
+        .Value = "STATUS"
+        .Interior.Color = RGB(173, 216, 230) ' Light Blue
+    End With
+    
+    ' Action 7.3: Copy data from GBCLM_REPORT (A22 onwards) and clean it
+    If lastRow > 21 Then
+        wsReport.Range("A22:A" & lastRow).Copy Destination:=wsSpace.Range("A2")
+        
+        ' Clean the data we just pasted
+        With wsSpace.Range("A2:A" & wsSpace.Cells(wsSpace.Rows.Count, "A").End(xlUp).Row)
+            .Replace What:="FEN-", Replacement:="", LookAt:=xlPart, MatchCase:=False
+            .RemoveDuplicates Columns:=1, Header:=xlNo
+        End With
+    End If
+    
+    ' Action 7.4: Perform VLOOKUP using the file path from Home!E10
+    Dim lookupFileName As String
+    If filePathFromCell <> "" And Dir(filePathFromCell) <> "" Then
+        ' Get just the filename from the full path for the formula
+        lookupFileName = Mid(filePathFromCell, InStrRev(filePathFromCell, "\") + 1)
+        
+        spaceLastRow = wsSpace.Cells(wsSpace.Rows.Count, "A").End(xlUp).Row
+        If spaceLastRow > 1 Then
+            Dim vlookupRange As Range
+            Set vlookupRange = wsSpace.Range("B2:B" & spaceLastRow)
+            
+            ' This formula looks in the other file's "Space issue" sheet, in columns C:D
+            vlookupRange.Formula = "=IFERROR(VLOOKUP(A2,'[" & lookupFileName & "]Space issue'!C:D,2,FALSE),""Not Found"")"
+            
+            ' Optional: Convert formulas to values to break the link to the other file
+            ' vlookupRange.Value = vlookupRange.Value
+        End If
+    Else
+        MsgBox "VLOOKUP in Step 7 was skipped because the file in Home!E10 could not be found.", vbExclamation
+    End If
+
+    ' Action 7.5: Autofit columns and activate sheet
+    wsSpace.Cells.EntireColumn.AutoFit
+    wsSpace.Activate
+
+    '==================================================================================
+    '===[ FINISH ]=====================================================================
+    '==================================================================================
+    
+    Application.ScreenUpdating = True
+    MsgBox "Process complete! All 7 steps have been successfully executed.", vbInformation
+
+End Sub
