@@ -134,18 +134,14 @@ Sub ProcessReport_Final_Guaranteed_Match()
             wsFEN.Cells(1, helperCol).Value = "Match Check"
             Dim currentLastRow As Long: currentLastRow = wsFEN.Cells(wsFEN.Rows.Count, "A").End(xlUp).Row
             
-            ' 2. Use COUNTIF to find matches. This is forgiving like VLOOKUP.
-            If currentLastRow > 1 Then
-                wsFEN.Range(wsFEN.Cells(2, helperCol), wsFEN.Cells(currentLastRow, helperCol)).FormulaR1C1 = _
-                    "=COUNTIF('[" & prevDayWB.Name & "]FEN Records'!C1,RC1)"
-            End If
+            ' 2. Use COUNTIF to find matches in the previous day's file. This is forgiving like VLOOKUP.
+            wsFEN.Range(wsFEN.Cells(2, helperCol), wsFEN.Cells(currentLastRow, helperCol)).FormulaR1C1 = _
+                "=COUNTIF('[" & prevDayWB.Name & "]FEN Records'!C1,RC1)"
                 
             ' 3. Filter for 0 (no match) and copy the new records
-            On Error Resume Next
             wsFEN.UsedRange.AutoFilter Field:=helperCol, Criteria1:="0"
             wsFEN.UsedRange.Offset(1).SpecialCells(xlCellTypeVisible).Copy wsAdded.Range("A2")
             wsFEN.AutoFilterMode = False
-            On Error GoTo 0
             
             ' 4. Delete the helper column
             wsFEN.Columns(helperCol).Delete
@@ -157,16 +153,12 @@ Sub ProcessReport_Final_Guaranteed_Match()
             Dim previousLastRow As Long: previousLastRow = wsPreviousFEN.Cells(wsPreviousFEN.Rows.Count, "A").End(xlUp).Row
 
             ' 2. Use COUNTIF to find matches in today's file
-            If previousLastRow > 1 Then
-                wsPreviousFEN.Range(wsPreviousFEN.Cells(2, helperCol), wsPreviousFEN.Cells(previousLastRow, helperCol)).FormulaR1C1 = _
-                    "=COUNTIF('[" & reportWB.Name & "]FEN Records'!C1,RC1)"
-            End If
+            wsPreviousFEN.Range(wsPreviousFEN.Cells(2, helperCol), wsPreviousFEN.Cells(previousLastRow, helperCol)).FormulaR1C1 = _
+                "=COUNTIF('[" & reportWB.Name & "]FEN Records'!C1,RC1)"
                 
             ' 3. Filter for 0 (no match) and copy the removed records
-            On Error Resume Next
             wsPreviousFEN.UsedRange.AutoFilter Field:=helperCol, Criteria1:="0"
             wsPreviousFEN.UsedRange.Offset(1).SpecialCells(xlCellTypeVisible).Copy wsRemoved.Range("A2")
-            On Error GoTo 0
             
             ' 4. Close the previous day's file WITHOUT saving the changes (which removes our helper column)
             prevDayWB.Close SaveChanges:=False
