@@ -1,6 +1,6 @@
 Option Explicit
 
-Sub ProcessReport_Final_Reliable_Version()
+Sub ProcessReport_Steps_1_to_6_Fixed()
 
     '==================================================================================
     '===[ SETUP ]======================================================================
@@ -17,7 +17,7 @@ Sub ProcessReport_Final_Reliable_Version()
     Dim lastRow As Long
 
     '==================================================================================
-    '===[ STEPS 1-6 (ALL UNTOUCHED AND WORKING) ]======================================
+    '===[ STEPS 1-5 (UNTOUCHED AND WORKING) ]==========================================
     '==================================================================================
 
     '--- Step 1 ---
@@ -96,7 +96,10 @@ Sub ProcessReport_Final_Reliable_Version()
         wsUniqueCIS.Columns("A:A").AutoFit
     End If
     
-    '--- Step 6 ---
+    '==================================================================================
+    '===[ STEP 6: CREATE PIVOT TABLE (CORRECTED) ]=====================================
+    '==================================================================================
+    
     Dim pvtCache As PivotCache, pvtTable As PivotTable, pvtSourceRange As Range
     Application.DisplayAlerts = False: On Error Resume Next
     reportWB.Worksheets("Analysis").Delete
@@ -104,8 +107,11 @@ Sub ProcessReport_Final_Reliable_Version()
     Set wsPivot = reportWB.Worksheets.Add(After:=reportWB.Sheets(reportWB.Sheets.Count))
     wsPivot.Name = "Analysis"
     Set pvtSourceRange = wsReport.Range("A21:E" & lastRow)
-    Set pvtCache = reportWB.PivotCaches.Create(SourceType:=xlDatabase, SourceData:=pvtSourceRange, Version:=8)
-    Set pvtTable = pvtCache.CreatePivotTable(TableDestination:=wsPivot.Range("A3"), TableName:="AnalysisPivot", Version:=8)
+    
+    ' --- THE FIX IS HERE: The "Version:=8" argument has been REMOVED ---
+    Set pvtCache = reportWB.PivotCaches.Create(SourceType:=xlDatabase, SourceData:=pvtSourceRange)
+    Set pvtTable = pvtCache.CreatePivotTable(TableDestination:=wsPivot.Range("A3"), TableName:="AnalysisPivot")
+    
     With pvtTable
         .PivotFields(" CIS CODE ").Orientation = xlRowField
         .PivotFields(" REVIEW STATUS ").Orientation = xlRowField
@@ -116,47 +122,13 @@ Sub ProcessReport_Final_Reliable_Version()
         .RepeatAllLabels xlRepeatLabels: .RowAxisLayout xlCompactRow
     End With
     
-    '==================================================================================
-    '===[ NEW STEP 7: PREPARE "Space issue" SHEET FOR MANUAL VLOOKUP ]=================
-    '==================================================================================
-    
-    Dim wsSpace As Worksheet
-    
-    ' Action 7.1: Create the "Space issue" sheet
-    Application.DisplayAlerts = False
-    On Error Resume Next
-    reportWB.Worksheets("Space issue").Delete
-    On Error GoTo 0
-    Application.DisplayAlerts = True
-    
-    Set wsSpace = reportWB.Worksheets.Add(After:=reportWB.Sheets(reportWB.Sheets.Count))
-    wsSpace.Name = "Space issue"
-    
-    ' Action 7.2: Copy data from GBCLM_REPORT (A22 to last row)
-    If lastRow > 21 Then
-        wsReport.Range("A22:A" & lastRow).Copy Destination:=wsSpace.Range("A1")
-        
-        ' Action 7.3: Clean the data on the new sheet
-        With wsSpace.Columns("A:A")
-            .Replace What:="FEN-", Replacement:="", LookAt:=xlPart, MatchCase:=False
-            .RemoveDuplicates Columns:=1, Header:=xlNo
-        End With
-        
-        ' Action 7.4: Add header for the manual VLOOKUP
-        wsSpace.Range("B1").Value = "STATUS"
-        
-        ' Action 7.5: Autofit the columns and activate the sheet
-        wsSpace.Cells.EntireColumn.AutoFit
-        wsSpace.Activate
-    End If
+    wsPivot.Activate
     
     '==================================================================================
     '===[ FINISH ]=====================================================================
     '==================================================================================
     
     Application.ScreenUpdating = True
-    MsgBox "Steps 1-6 are complete and the 'Space issue' sheet has been prepared." & vbCrLf & vbCrLf & _
-           "Please complete the final step manually:" & vbCrLf & _
-           "Go to cell B2 on the 'Space issue' sheet and enter your VLOOKUP formula.", vbInformation, "Manual Step Required"
+    MsgBox "Process complete! Steps 1 to 6 executed successfully.", vbInformation
 
 End Sub
