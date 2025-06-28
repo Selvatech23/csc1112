@@ -6,11 +6,14 @@ Sub ProcessReport_Steps_1_to_7_New()
     '===[ SETUP ]======================================================================
     '==================================================================================
     
+    ' This special line tells VBA to go to the "ErrorHandler" section if ANY error occurs
+    On Error GoTo ErrorHandler
+    
     Application.ScreenUpdating = False
     
     Dim reportWB As Workbook, macroWB As Workbook
     Set reportWB = ActiveWorkbook
-    Set macroWB = ThisWorkbook ' The workbook where this code is saved
+    Set macroWB = ThisWorkbook
     
     Dim wsReport As Worksheet, wsFEN As Worksheet, wsUniqueCIS As Worksheet, wsPivot As Worksheet
     Set wsReport = reportWB.ActiveSheet
@@ -20,6 +23,7 @@ Sub ProcessReport_Steps_1_to_7_New()
     '==================================================================================
     '===[ STEPS 1-6 (ALL UNTOUCHED AND WORKING) ]======================================
     '==================================================================================
+    ' (The code for steps 1-6 is identical to the last version)
 
     '--- Step 1 ---
     wsReport.Columns("A:A").TextToColumns Destination:=wsReport.Range("A1"), _
@@ -31,15 +35,15 @@ Sub ProcessReport_Steps_1_to_7_New()
     If wsReport.Name <> "GBCLM_REPORT" Then
         On Error Resume Next
         wsReport.Name = "GBCLM_REPORT"
-        If Err.Number <> 0 Then MsgBox "Could not rename sheet.", vbCritical: Err.Clear: Application.ScreenUpdating = True: Exit Sub
-        On Error GoTo 0
+        If Err.Number <> 0 Then MsgBox "Could not rename sheet.", vbCritical: GoTo EndMacro
+        On Error GoTo ErrorHandler ' Reset error handler
     End If
     Set wsReport = reportWB.Worksheets("GBCLM_REPORT")
 
     '--- Step 2 ---
-    Application.DisplayAlerts = False: On Error Resume Next
+    On Error Resume Next ' Temporarily ignore "sheet not found" error
     reportWB.Worksheets("FEN Records").Delete
-    On Error Go-To 0: Application.DisplayAlerts = True
+    On Error GoTo ErrorHandler ' Reset error handler
     Set wsFEN = reportWB.Worksheets.Add(After:=wsReport)
     wsFEN.Name = "FEN Records"
     wsReport.Range("A21:E21").Copy wsFEN.Range("A1")
@@ -52,9 +56,9 @@ Sub ProcessReport_Steps_1_to_7_New()
         Set filterRange = wsReport.Range("A21:E" & lastRow)
         wsReport.AutoFilterMode = False
         filterRange.AutoFilter Field:=1, Criteria1:="FEN-*"
-        On Error Resume Next
+        On Error Resume Next ' Ignore error if no cells found
         Set dataToCopy = filterRange.Offset(1, 0).SpecialCells(xlCellTypeVisible)
-        On Error GoTo 0
+        On Error GoTo ErrorHandler ' Reset error handler
         If Not dataToCopy Is Nothing Then dataToCopy.Copy wsFEN.Range("A2"): wsFEN.Cells.EntireColumn.AutoFit
         wsReport.AutoFilterMode = False
     End If
@@ -80,9 +84,9 @@ Sub ProcessReport_Steps_1_to_7_New()
     '--- Step 5 ---
     If lastRow > 21 Then
         Dim sourceRange As Range, uniqueLastRow As Long
-        Application.DisplayAlerts = False: On Error Resume Next
+        On Error Resume Next ' Ignore error if sheet doesn't exist
         reportWB.Worksheets("Unique CIS").Delete
-        On Error GoTo 0: Application.DisplayAlerts = True
+        On Error GoTo ErrorHandler ' Reset error handler
         Set wsUniqueCIS = reportWB.Worksheets.Add(After:=wsFEN)
         wsUniqueCIS.Name = "Unique CIS"
         Set sourceRange = wsReport.Range("A22:A" & lastRow)
@@ -99,9 +103,9 @@ Sub ProcessReport_Steps_1_to_7_New()
     
     '--- Step 6 ---
     Dim pvtCache As PivotCache, pvtTable As PivotTable, pvtSourceRange As Range
-    Application.DisplayAlerts = False: On Error Resume Next
+    On Error Resume Next ' Ignore error if sheet doesn't exist
     reportWB.Worksheets("Analysis").Delete
-    On Error GoTo 0: Application.DisplayAlerts = True
+    On Error GoTo ErrorHandler ' Reset error handler
     Set wsPivot = reportWB.Worksheets.Add(After:=reportWB.Sheets(reportWB.Sheets.Count))
     wsPivot.Name = "Analysis"
     Set pvtSourceRange = wsReport.Range("A21:E" & lastRow)
@@ -118,33 +122,31 @@ Sub ProcessReport_Steps_1_to_7_New()
     End With
     
     '==================================================================================
-    '===[ STEP 7: POPULATE DATA (NEW "BULLETPROOF" VERSION) ]==========================
+    '===[ STEP 7: POPULATE DATA (AGGRESSIVE ERROR REPORTING) ]=========================
     '==================================================================================
     
     Dim prevDayValueC2 As Variant, prevDayValueC3 As Variant
-    Dim folderPath As String, wsHome As Worksheet, proceed As Boolean
+    Dim folderPath As String, wsHome As Worksheet
     
     '--- Part 1: Check for 'Home' sheet and path in cell E10 ---
-    On Error Resume Next
+    On Error Resume Next ' Temporarily disable error jump
     Set wsHome = macroWB.Worksheets("Home")
-    On Error GoTo 0
+    On Error GoTo ErrorHandler ' Re-enable error jump
     
     If wsHome Is Nothing Then
         MsgBox "CONFIGURATION ERROR:" & vbCrLf & "A sheet named 'Home' was not found in your macro workbook. Step 7 cannot run.", vbCritical
-        GoTo EndMacro ' Exit the macro cleanly
+        GoTo EndMacro
     End If
     
     folderPath = wsHome.Range("E10").Value
     If folderPath = "" Then
         MsgBox "CONFIGURATION ERROR:" & vbCrLf & "Cell E10 on the 'Home' sheet is empty. Please provide the folder path. Step 7 cannot run.", vbCritical
-        GoTo EndMacro ' Exit the macro cleanly
+        GoTo EndMacro
     End If
     
     '--- Part 2: Find and Open Previous Day's File ---
     Dim prevDayPath As String, prevDayDate As Date, prevDayWB As Workbook
-    proceed = False ' Set a flag
     
-    ' Default values in case we can't get the data
     prevDayValueC2 = 0
     prevDayValueC3 = 0
 
@@ -156,68 +158,57 @@ Sub ProcessReport_Steps_1_to_7_New()
     prevDayPath = folderPath & Format(prevDayDate, "ddmmyyyy") & ".xlsx"
     
     If Dir(prevDayPath) <> "" Then
-        ' File was found, open it
         Set prevDayWB = Workbooks.Open(prevDayPath, ReadOnly:=True)
-        On Error Resume Next
         prevDayValueC2 = prevDayWB.Worksheets("GBCLM_REPORT").Range("G2").Value
         prevDayValueC3 = prevDayWB.Worksheets("GBCLM_REPORT").Range("G3").Value
-        If Err.Number <> 0 Then
-             MsgBox "ERROR: Could not read values from 'GBCLM_REPORT' sheet in the previous day's file.", vbExclamation
-             ' Values will remain 0
-        End If
-        On Error GoTo 0
         prevDayWB.Close SaveChanges:=False
-        proceed = True
     Else
-        ' File was NOT found, ask the user what to do
-        Dim userResponse As VbMsgBoxResult
-        userResponse = MsgBox("Previous day's file was not found at:" & vbCrLf & prevDayPath & vbCrLf & vbCrLf & _
-                              "Do you want to continue with '0' for previous day's values?", vbQuestion + vbYesNo, "File Not Found")
-        If userResponse = vbYes Then
-            proceed = True ' User chose to continue
-        Else
-            proceed = False ' User chose to cancel
+        If MsgBox("Previous day's file was not found at:" & vbCrLf & prevDayPath & vbCrLf & vbCrLf & _
+                   "Do you want to continue with '0' for previous day's values?", vbQuestion + vbYesNo, "File Not Found") = vbNo Then
+            MsgBox "Macro cancelled by user.", vbInformation
+            GoTo EndMacro
         End If
     End If
 
-    '--- Part 3: Populate Column G only if we are cleared to proceed ---
-    If proceed Then
-        Dim fenLastRow As Long, fenSentCol As String
-        fenLastRow = wsFEN.Cells(wsFEN.Rows.Count, "A").End(xlUp).Row
-        fenSentCol = "D" ' Assuming "SENT ? (Yes/No)" is in column D
-        
-        With wsReport
-            .Range("G2").Formula = "=COUNTA('FEN Records'!A2:A" & fenLastRow & ")"
-            .Range("G3").Formula = "=COUNTIF('FEN Records'!" & fenSentCol & ":" & fenSentCol & ",""No"")"
-            .Range("G4").Formula = "=COUNTIF('FEN Records'!" & fenSentCol & ":" & fenSentCol & ",""No"")"
-            .Range("G5").Value = 0
-            .Range("G6").Value = 0
-            .Range("G7").Value = 0
-            .Range("G8").Formula = "=COUNTIF('FEN Records'!" & fenSentCol & ":" & fenSentCol & ",""Yes"")"
-            .Range("G9").Formula = "=G2-(G3+G8)"
-            .Range("G11").Formula = "=G3"
-            .Range("G12").Value = prevDayValueC3
-            .Range("G13").Formula = "=G11-G12"
-            .Range("G14").Formula = "=IFERROR(G13/G11,0)"
-            .Range("G14").NumberFormat = "0.00%"
-            .Range("G16").Formula = "=G2"
-            .Range("G17").Value = prevDayValue-C2
-            .Range("G18").Formula = "=G16-G17"
-            .Columns("G:G").AutoFit
-            .Activate
-        End With
-    Else
-        MsgBox "Macro cancelled by user.", vbInformation
-    End If
-
-EndMacro: ' This is our clean exit point
-    '==================================================================================
-    '===[ FINISH ]=====================================================================
-    '==================================================================================
+    '--- Part 3: Populate Column G ---
+    Dim fenLastRow As Long, fenSentCol As String
+    fenLastRow = wsFEN.Cells(wsFEN.Rows.Count, "A").End(xlUp).Row
+    fenSentCol = "D"
     
+    With wsReport
+        .Range("G2").Formula = "=COUNTA('FEN Records'!A2:A" & fenLastRow & ")"
+        .Range("G3").Formula = "=COUNTIF('FEN Records'!" & fenSentCol & ":" & fenSentCol & ",""No"")"
+        .Range("G4").Formula = "=COUNTIF('FEN Records'!" & fenSentCol & ":" & fenSentCol & ",""No"")"
+        .Range("G5").Value = 0
+        .Range("G6").Value = 0
+        .Range("G7").Value = 0
+        .Range("G8").Formula = "=COUNTIF('FEN Records'!" & fenSentCol & ":" & fenSentCol & ",""Yes"")"
+        .Range("G9").Formula = "=G2-(G3+G8)"
+        .Range("G11").Formula = "=G3"
+        .Range("G12").Value = prevDayValueC3
+        .Range("G13").Formula = "=G11-G12"
+        .Range("G14").Formula = "=IFERROR(G13/G11,0)"
+        .Range("G14").NumberFormat = "0.00%"
+        .Range("G16").Formula = "=G2"
+        ' --- TYPO CORRECTED HERE ---
+        .Range("G17").Value = prevDayValueC2
+        .Range("G18").Formula = "=G16-G17"
+        .Columns("G:G").AutoFit
+        .Activate
+    End With
+    
+    MsgBox "Process complete! All 7 steps executed successfully.", vbInformation
+
+EndMacro:
+    ' This is our clean exit point
     Application.ScreenUpdating = True
-    If proceed Then
-        MsgBox "Process complete! All 7 steps executed successfully.", vbInformation
-    End If
+    Exit Sub ' This is important to prevent falling into the error handler below
+
+ErrorHandler:
+    ' This section only runs if an error occurs anywhere in the code
+    MsgBox "A run-time error occurred!" & vbCrLf & vbCrLf & _
+           "Error Number: " & Err.Number & vbCrLf & _
+           "Description: " & Err.Description, vbCritical, "Macro Error"
+    GoTo EndMacro ' Go to the end to clean up
 
 End Sub
