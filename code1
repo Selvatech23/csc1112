@@ -1,9 +1,12 @@
-Sub space()
+
+Sub Macro3()
 '
-' space Macro
+' Macro3 Macro
 '
 
 '
+    ActiveWindow.SmallScroll Down:=5
+    Range("A21").Select
     Range(Selection, Selection.End(xlDown)).Select
     Selection.Copy
     Sheets.Add After:=ActiveSheet
@@ -14,6 +17,7 @@ Sub space()
     Selection.Replace What:="FEN-", Replacement:="", LookAt:=xlPart, _
         SearchOrder:=xlByRows, MatchCase:=False, SearchFormat:=False, _
         ReplaceFormat:=False, FormulaVersion:=xlReplaceFormula2
+    Columns("A:A").Select
     Application.CutCopyMode = False
     ActiveSheet.Range("$A$1:$A$102654").RemoveDuplicates Columns:=1, Header:= _
         xlNo
@@ -26,4 +30,5 @@ Sub space()
     Selection.AutoFill Destination:=Range("B2:B95046")
     Range("B2:B95046").Select
     Range("B1").Select
+
 End Sub
