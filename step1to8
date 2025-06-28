@@ -1,6 +1,6 @@
 Option Explicit
 
-Sub ProcessReport_Final_Guaranteed_Match()
+Sub ProcessReport_Final_Version()
 
     '==================================================================================
     '===[ SETUP & STEPS 1-7 - UNCHANGED ]==============================================
@@ -105,7 +105,7 @@ Sub ProcessReport_Final_Guaranteed_Match()
     wsSpace.Cells.EntireColumn.AutoFit
     
     '==================================================================================
-    '===[ STEP 8: FIND ADDED/REMOVED (GUARANTEED HELPER COLUMN METHOD) ]===============
+    '===[ STEP 8: FIND ADDED/REMOVED (FINAL CORRECTED VERSION) ]=======================
     '==================================================================================
 
     Dim wsAdded As Worksheet, wsRemoved As Worksheet, wsPreviousFEN As Worksheet
@@ -129,38 +129,46 @@ Sub ProcessReport_Final_Guaranteed_Match()
             MsgBox "Could not find 'FEN Records' sheet in previous day's file.", vbExclamation: prevDayWB.Close False
         Else
             ' --- Find ADDED records ---
-            ' 1. Add a temporary helper column to today's "FEN Records" sheet
-            helperCol = wsFEN.UsedRange.Columns.Count + 1
+            helperCol = 6 ' Use a fixed column number (F) for simplicity and reliability
             wsFEN.Cells(1, helperCol).Value = "Match Check"
             Dim currentLastRow As Long: currentLastRow = wsFEN.Cells(wsFEN.Rows.Count, "A").End(xlUp).Row
-            
-            ' 2. Use COUNTIF to find matches in the previous day's file. This is forgiving like VLOOKUP.
-            wsFEN.Range(wsFEN.Cells(2, helperCol), wsFEN.Cells(currentLastRow, helperCol)).FormulaR1C1 = _
-                "=COUNTIF('[" & prevDayWB.Name & "]FEN Records'!C1,RC1)"
-                
-            ' 3. Filter for 0 (no match) and copy the new records
-            wsFEN.UsedRange.AutoFilter Field:=helperCol, Criteria1:="0"
-            wsFEN.UsedRange.Offset(1).SpecialCells(xlCellTypeVisible).Copy wsAdded.Range("A2")
+            If currentLastRow > 1 Then
+                wsFEN.Range("F2:F" & currentLastRow).FormulaR1C1 = _
+                    "=COUNTIF('[" & prevDayWB.Name & "]FEN Records'!C1,RC1)"
+            End If
+            On Error Resume Next
+            wsFEN.Range("A1:F" & currentLastRow).AutoFilter Field:=helperCol, Criteria1:="0"
+            If wsFEN.AutoFilter.Range.Columns(1).SpecialCells(xlCellTypeVisible).Count > 1 Then
+                ' Now we only copy the specific columns A:E
+                wsFEN.Range("A2:E" & currentLastRow).SpecialCells(xlCellTypeVisible).Copy wsAdded.Range("A2")
+            End If
             wsFEN.AutoFilterMode = False
-            
-            ' 4. Delete the helper column
+            On Error GoTo 0
             wsFEN.Columns(helperCol).Delete
 
             ' --- Find REMOVED records ---
-            ' 1. Add a temporary helper column to the PREVIOUS day's "FEN Records" sheet
-            helperCol = wsPreviousFEN.UsedRange.Columns.Count + 1
+            helperCol = 6 ' Use a fixed column number (F)
             wsPreviousFEN.Cells(1, helperCol).Value = "Match Check"
             Dim previousLastRow As Long: previousLastRow = wsPreviousFEN.Cells(wsPreviousFEN.Rows.Count, "A").End(xlUp).Row
-
-            ' 2. Use COUNTIF to find matches in today's file
-            wsPreviousFEN.Range(wsPreviousFEN.Cells(2, helperCol), wsPreviousFEN.Cells(previousLastRow, helperCol)).FormulaR1C1 = _
-                "=COUNTIF('[" & reportWB.Name & "]FEN Records'!C1,RC1)"
-                
-            ' 3. Filter for 0 (no match) and copy the removed records
-            wsPreviousFEN.UsedRange.AutoFilter Field:=helperCol, Criteria1:="0"
-            wsPreviousFEN.UsedRange.Offset(1).SpecialCells(xlCellTypeVisible).Copy wsRemoved.Range("A2")
             
-            ' 4. Close the previous day's file WITHOUT saving the changes (which removes our helper column)
+            '--- THE CRITICAL FIX IS HERE ---
+            ' The COUNTIF must reference the full range in the CURRENT workbook
+            Dim todayLookupRange As String
+            todayLookupRange = "'" & reportWB.Path & "\[" & reportWB.Name & "]FEN Records'!R2C1:R" & currentLastRow & "C1"
+
+            If previousLastRow > 1 Then
+                wsPreviousFEN.Range("F2:F" & previousLastRow).Formula = _
+                    "=COUNTIF(" & todayLookupRange & ",A2)"
+            End If
+            ' --- END OF FIX ---
+                
+            On Error Resume Next
+            wsPreviousFEN.Range("A1:F" & previousLastRow).AutoFilter Field:=helperCol, Criteria1:="0"
+            If wsPreviousFEN.AutoFilter.Range.Columns(1).SpecialCells(xlCellTypeVisible).Count > 1 Then
+                 ' Now we only copy the specific columns A:E
+                wsPreviousFEN.Range("A2:E" & previousLastRow).SpecialCells(xlCellTypeVisible).Copy wsRemoved.Range("A2")
+            End If
+            
             prevDayWB.Close SaveChanges:=False
             
             wsAdded.Cells.EntireColumn.AutoFit: wsRemoved.Cells.EntireColumn.AutoFit: wsAdded.Activate
