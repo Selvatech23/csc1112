@@ -1,0 +1,149 @@
+Option Explicit
+
+Sub ProcessReport_Combined()
+
+    '==================================================================================
+    '===[ SETUP ]======================================================================
+    '==================================================================================
+    
+    ' This line prevents screen flickering and makes the macro run much faster.
+    Application.ScreenUpdating = False
+    
+    Dim wsReport As Worksheet ' This will be our main report sheet
+    Set wsReport = ActiveSheet
+    
+    ' --- PLEASE CONFIRM THIS ---
+    ' Based on your request, we assume headers are in Row 20.
+    ' If your headers are in a different row (e.g., row 1), change the number below.
+    Const HeaderRow As Long = 20
+    
+
+    '==================================================================================
+    '===[ STEP 1: PARSE AND PREPARE "GBCLM_REPORT" SHEET ]=============================
+    '==================================================================================
+    
+    ' Action 1.1: Parse data in Column A using "|" as the delimiter
+    wsReport.Columns("A:A").TextToColumns Destination:=wsReport.Range("A1"), _
+                                      DataType:=xlDelimited, _
+                                      TextQualifier:=xlDoubleQuote, _
+                                      ConsecutiveDelimiter:=False, _
+                                      Tab:=False, _
+                                      Semicolon:=False, _
+                                      Comma:=False, _
+                                      Space:=False, _
+                                      Other:=True, _
+                                      OtherChar:="|"
+
+    ' Action 1.2: Delete the now-empty first column (which was before the first "|")
+    wsReport.Columns("A:A").Delete
+    
+    ' Action 1.3: Rename the worksheet to "GBCLM_REPORT"
+    ' It includes error handling in case the name is already taken.
+    If wsReport.Name <> "GBCLM_REPORT" Then
+        On Error Resume Next
+        wsReport.Name = "GBCLM_REPORT"
+        If Err.Number <> 0 Then
+            MsgBox "Could not rename the sheet to 'GBCLM_REPORT'." & vbCrLf & _
+                   "Another sheet may already have that name. Aborting macro.", vbCritical
+            Err.Clear
+            Application.ScreenUpdating = True
+            Exit Sub ' Stop the macro if we can't rename the sheet
+        End If
+        On Error GoTo 0
+    End If
+    
+
+    '==================================================================================
+    '===[ STEP 2: CREATE "FEN Records" SHEET ]=========================================
+    '==================================================================================
+    
+    Dim wsFEN As Worksheet        ' This will be our new "FEN Records" sheet
+    Dim filterRange As Range      ' The full range to be filtered (headers + data)
+    Dim dataRange As Range        ' The visible cells after filtering
+    Dim lastRow As Long           ' The last row with data on the report sheet
+    Dim lastCol As Long           ' The last column with data
+    Dim cisCodeCol As Variant     ' The column number of "CIS CODE"
+    
+    ' Action 2.1: Find the last row and column to define our data area
+    lastRow = wsReport.Cells(wsReport.Rows.Count, "A").End(xlUp).Row
+    lastCol = wsReport.Cells(HeaderRow, wsReport.Columns.Count).End(xlToLeft).Column
+    
+    ' Check if there is any data to filter
+    If lastRow <= HeaderRow Then
+        MsgBox "No data found below the header row (Row " & HeaderRow & ") on the 'GBCLM_REPORT' sheet.", vbInformation
+        Application.ScreenUpdating = True
+        Exit Sub
+    End If
+    
+    ' Action 2.2: Find the column named "CIS CODE" in the header row
+    ' This is safer than assuming it's always in a specific column like "C" or "D"
+    On Error Resume Next
+    cisCodeCol = Application.Match("CIS CODE", wsReport.Rows(HeaderRow), 0)
+    On Error GoTo 0
+    
+    If IsError(cisCodeCol) Then
+        MsgBox "Could not find a column named 'CIS CODE' in Row " & HeaderRow & "." & vbCrLf & _
+               "Please check the header name. Aborting macro.", vbCritical
+        Application.ScreenUpdating = True
+        Exit Sub
+    End If
+    
+    ' Action 2.3: Prepare the "FEN Records" sheet (delete if it exists, then create new)
+    Application.DisplayAlerts = False ' Suppress "Do you want to delete?" prompt
+    On Error Resume Next
+    ThisWorkbook.Worksheets("FEN Records").Delete
+    On Error GoTo 0
+    Application.DisplayAlerts = True
+    
+    Set wsFEN = ThisWorkbook.Worksheets.Add(After:=wsReport)
+    wsFEN.Name = "FEN Records"
+    
+    ' Action 2.4: Apply the filter
+    ' First, ensure no old filters are active on the sheet
+    wsReport.AutoFilterMode = False
+    
+    ' Define the entire range to filter, including headers
+    Set filterRange = wsReport.Range(wsReport.Cells(HeaderRow, 1), wsReport.Cells(lastRow, lastCol))
+    
+    ' Apply the filter to the "CIS CODE" column for values starting with "FEN-"
+    filterRange.AutoFilter Field:=cisCodeCol, Criteria1:="FEN-*"
+    
+    ' Action 2.5: Copy the visible (filtered) data to the new sheet
+    On Error Resume Next ' In case no cells are found
+    Set dataRange = filterRange.SpecialCells(xlCellTypeVisible)
+    On Error GoTo 0
+    
+    ' Check if the filter returned any results (besides the header)
+    If dataRange.Rows.Count > 1 Then
+        dataRange.Copy Destination:=wsFEN.Range("A1")
+    Else
+        ' If only the header row is visible, no data was found
+        MsgBox "No records with a 'CIS CODE' starting with 'FEN-' were found.", vbInformation
+        ' Clean up by deleting the empty "FEN Records" sheet
+        Application.DisplayAlerts = False
+        wsFEN.Delete
+        Application.DisplayAlerts = True
+    End If
+    
+    ' Action 2.6: Clean up by removing the filter from the "GBCLM_REPORT" sheet
+    wsReport.AutoFilterMode = False
+    
+    ' Action 2.7: Autofit all columns on both sheets for readability
+    wsReport.Cells.EntireColumn.AutoFit
+    If Not wsFEN Is Nothing And wsFEN.UsedRange.Cells.Count > 0 Then
+        wsFEN.Cells.EntireColumn.AutoFit
+    End If
+    
+    ' Bring the main report sheet back into view
+    wsReport.Activate
+
+    '==================================================================================
+    '===[ FINISH ]=====================================================================
+    '==================================================================================
+
+    Application.ScreenUpdating = True
+    MsgBox "Process complete!" & vbCrLf & vbCrLf & _
+           "Step 1: Data parsed on 'GBCLM_REPORT' sheet." & vbCrLf & _
+           "Step 2: 'FEN Records' sheet created with filtered data.", vbInformation
+
+End Sub
