@@ -1,6 +1,6 @@
 Option Explicit
 
-Sub ProcessReport_Final_With_New_Step7()
+Sub ProcessReport_Final_Reliable_Version()
 
     '==================================================================================
     '===[ SETUP ]======================================================================
@@ -117,12 +117,10 @@ Sub ProcessReport_Final_With_New_Step7()
     End With
     
     '==================================================================================
-    '===[ NEW STEP 7: CREATE "Space issue" SHEET & VLOOKUP ]===========================
+    '===[ NEW STEP 7: PREPARE "Space issue" SHEET FOR MANUAL VLOOKUP ]=================
     '==================================================================================
     
     Dim wsSpace As Worksheet
-    Dim spaceSourceRange As Range
-    Dim spaceLastRow As Long
     
     ' Action 7.1: Create the "Space issue" sheet
     Application.DisplayAlerts = False
@@ -136,8 +134,7 @@ Sub ProcessReport_Final_With_New_Step7()
     
     ' Action 7.2: Copy data from GBCLM_REPORT (A22 to last row)
     If lastRow > 21 Then
-        Set spaceSourceRange = wsReport.Range("A22:A" & lastRow)
-        spaceSourceRange.Copy Destination:=wsSpace.Range("A1")
+        wsReport.Range("A22:A" & lastRow).Copy Destination:=wsSpace.Range("A1")
         
         ' Action 7.3: Clean the data on the new sheet
         With wsSpace.Columns("A:A")
@@ -145,51 +142,21 @@ Sub ProcessReport_Final_With_New_Step7()
             .RemoveDuplicates Columns:=1, Header:=xlNo
         End With
         
-        ' Action 7.4: Ask user to select the VLOOKUP source file
-        MsgBox "You will now be asked to select the file to use for the VLOOKUP.", vbInformation, "Select VLOOKUP Source File"
+        ' Action 7.4: Add header for the manual VLOOKUP
+        wsSpace.Range("B1").Value = "STATUS"
         
-        Dim fDialog As FileDialog, lookupFilePath As String, lookupFileName As String
-        Set fDialog = Application.FileDialog(msoFileDialogFilePicker)
-        fDialog.Title = "Please Select the VLOOKUP Source File (e.g., 25062025.xlsm)"
-        fDialog.Filters.Clear
-        fDialog.Filters.Add "Excel Files", "*.xlsx; *.xls; *.xlsm"
-        
-        If fDialog.Show = -1 Then ' User selected a file
-            lookupFilePath = fDialog.SelectedItems(1)
-            ' Extract just the file name from the full path
-            lookupFileName = Mid(lookupFilePath, InStrRev(lookupFilePath, "\") + 1)
-            
-            ' Action 7.5: Add header and VLOOKUP formula
-            wsSpace.Range("B1").Value = "STATUS"
-            
-            spaceLastRow = wsSpace.Cells(wsSpace.Rows.Count, "A").End(xlUp).Row
-            If spaceLastRow > 1 Then
-                Dim vlookupRange As Range
-                Set vlookupRange = wsSpace.Range("B2:B" & spaceLastRow)
-                
-                ' NOTE: Your macro recorded a lookup range of C1:C2. This is usually too small.
-                ' I am using C:D as it is more common for a VLOOKUP. Change if needed.
-                vlookupRange.Formula = "=IFERROR(VLOOKUP(A2,'[" & lookupFileName & "]Space issue'!C:D,2,FALSE),""Not Found"")"
-                
-                ' Convert formulas to values to break the link to the other file
-                vlookupRange.Value = vlookupRange.Value
-            End If
-        Else
-            ' User cancelled the file selection
-            wsSpace.Range("B1").Value = "STATUS (VLOOKUP cancelled)"
-        End If
-        
-        ' Action 7.6: Autofit the columns
+        ' Action 7.5: Autofit the columns and activate the sheet
         wsSpace.Cells.EntireColumn.AutoFit
         wsSpace.Activate
     End If
     
-
     '==================================================================================
     '===[ FINISH ]=====================================================================
     '==================================================================================
     
     Application.ScreenUpdating = True
-    MsgBox "Process complete! All steps, including the new Step 7, executed successfully.", vbInformation
+    MsgBox "Steps 1-6 are complete and the 'Space issue' sheet has been prepared." & vbCrLf & vbCrLf & _
+           "Please complete the final step manually:" & vbCrLf & _
+           "Go to cell B2 on the 'Space issue' sheet and enter your VLOOKUP formula.", vbInformation, "Manual Step Required"
 
 End Sub
