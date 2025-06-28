@@ -8,11 +8,12 @@ Sub ProcessReport_Steps_1_and_2_Simple()
     
     Application.ScreenUpdating = False ' Prevents screen flicker, speeds up macro
     
+    ' Using ActiveSheet ensures we are starting in the correct workbook from the beginning.
     Dim wsReport As Worksheet
     Set wsReport = ActiveSheet
     
     '==================================================================================
-    '===[ STEP 1: PARSE AND PREPARE "GBCLM_REPORT" SHEET (AS APPROVED) ]===============
+    '===[ STEP 1: PARSE AND PREPARE "GBCLM_REPORT" SHEET ]=============================
     '==================================================================================
     
     ' Action 1.1: Parse data in Column A using "|" as the delimiter
@@ -49,19 +50,21 @@ Sub ProcessReport_Steps_1_and_2_Simple()
     
 
     '==================================================================================
-    '===[ STEP 2: CREATE SHEET AND COPY HEADERS ONLY ]=================================
+    '===[ STEP 2: CREATE SHEET AND COPY HEADERS ONLY (IN ACTIVE WORKBOOK) ]============
     '==================================================================================
     
     Dim wsFEN As Worksheet
     
-    ' Action 2.1: Prepare the "FEN Records" sheet (delete if it exists, then create new)
+    ' --- CORRECTED ---
+    ' Action 2.1: Use ActiveWorkbook to ensure we delete/add sheets in the data file.
     Application.DisplayAlerts = False
     On Error Resume Next
-    ThisWorkbook.Worksheets("FEN Records").Delete
+    ActiveWorkbook.Worksheets("FEN Records").Delete ' Changed from ThisWorkbook
     On Error GoTo 0
     Application.DisplayAlerts = True
     
-    Set wsFEN = ThisWorkbook.Worksheets.Add(After:=wsReport)
+    ' --- CORRECTED ---
+    Set wsFEN = ActiveWorkbook.Worksheets.Add(After:=wsReport) ' Changed from ThisWorkbook
     wsFEN.Name = "FEN Records"
     
     ' Action 2.2: Copy ONLY the header range (A21:E21) to the new sheet
