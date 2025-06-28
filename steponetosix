@@ -1,6 +1,6 @@
 Option Explicit
 
-Sub ProcessReport_Steps_1_to_6()
+Sub ProcessReport_Steps_1_to_6_Fixed()
 
     '==================================================================================
     '===[ SETUP ]======================================================================
@@ -10,7 +10,7 @@ Sub ProcessReport_Steps_1_to_6()
     
     Dim reportWB As Workbook, macroWB As Workbook
     Set reportWB = ActiveWorkbook
-    Set macroWB = ThisWorkbook ' The workbook where this code is saved
+    Set macroWB = ThisWorkbook
     
     Dim wsReport As Worksheet, wsFEN As Worksheet, wsUniqueCIS As Worksheet
     Set wsReport = reportWB.ActiveSheet
@@ -98,33 +98,32 @@ Sub ProcessReport_Steps_1_to_6()
     End If
     
     '==================================================================================
-    '===[ NEW STEP 6: POPULATE DATA ("BULLETPROOF" VERSION) ]==========================
+    '===[ STEP 6: POPULATE DATA (WITH PATH CLEANING FIX) ]=============================
     '==================================================================================
     
-    Dim prevDayValueC2 As Variant, prevDayValueC3 As Variant
-    Dim folderPath As String, wsHome As Worksheet, proceed As Boolean
+    Dim prevDayValueC2 As Variant, prevDayValueC3 As Variant, folderPath As String, wsHome As Worksheet
     
-    '--- Part 1: Check for 'Home' sheet and path in cell E10 ---
+    '--- Part 1: Get path from 'Home' sheet ---
     On Error Resume Next
     Set wsHome = macroWB.Worksheets("Home")
     On Error GoTo 0
     
-    If wsHome Is Nothing Then
-        MsgBox "CONFIGURATION ERROR:" & vbCrLf & "A sheet named 'Home' was not found in your macro workbook. Step 6 cannot run.", vbCritical
-        GoTo EndMacro ' Exit the macro cleanly
-    End If
-    
+    If wsHome Is Nothing Then GoTo EndMacro ' Exit cleanly if Home sheet not found
     folderPath = wsHome.Range("E10").Value
-    If folderPath = "" Then
-        MsgBox "CONFIGURATION ERROR:" & vbCrLf & "Cell E10 on the 'Home' sheet is empty. Please provide the folder path. Step 6 cannot run.", vbCritical
-        GoTo EndMacro ' Exit the macro cleanly
-    End If
+    If folderPath = "" Then GoTo EndMacro ' Exit cleanly if path is empty
+    
+    '--- THE FIX IS HERE: Automatically clean the path of illegal characters ---
+    folderPath = Replace(folderPath, """", "") ' Remove quotes
+    folderPath = Replace(folderPath, "<", "")
+    folderPath = Replace(folderPath, ">", "")
+    folderPath = Replace(folderPath, "|", "")
+    folderPath = Replace(folderPath, "?", "")
+    folderPath = Replace(folderPath, "*", "")
+    ' End of fix
     
     '--- Part 2: Find and Open Previous Day's File ---
     Dim prevDayPath As String, prevDayDate As Date, prevDayWB As Workbook
-    proceed = False ' Set a flag
     
-    ' Default values in case we can't get the data
     prevDayValueC2 = 0
     prevDayValueC3 = 0
 
@@ -136,68 +135,46 @@ Sub ProcessReport_Steps_1_to_6()
     prevDayPath = folderPath & Format(prevDayDate, "ddmmyyyy") & ".xlsx"
     
     If Dir(prevDayPath) <> "" Then
-        ' File was found, open it
         Set prevDayWB = Workbooks.Open(prevDayPath, ReadOnly:=True)
         On Error Resume Next
         prevDayValueC2 = prevDayWB.Worksheets("GBCLM_REPORT").Range("G2").Value
         prevDayValueC3 = prevDayWB.Worksheets("GBCLM_REPORT").Range("G3").Value
-        If Err.Number <> 0 Then
-             MsgBox "ERROR: Could not read values from 'GBCLM_REPORT' sheet in the previous day's file.", vbExclamation
-             ' Values will remain 0
-        End If
         On Error GoTo 0
         prevDayWB.Close SaveChanges:=False
-        proceed = True
-    Else
-        ' File was NOT found, ask the user what to do
-        Dim userResponse As VbMsgBoxResult
-        userResponse = MsgBox("Previous day's file was not found at:" & vbCrLf & prevDayPath & vbCrLf & vbCrLf & _
-                              "Do you want to continue with '0' for previous day's values?", vbQuestion + vbYesNo, "File Not Found")
-        If userResponse = vbYes Then
-            proceed = True ' User chose to continue
-        Else
-            proceed = False ' User chose to cancel
-        End If
     End If
 
-    '--- Part 3: Populate Column G only if we are cleared to proceed ---
-    If proceed Then
-        Dim fenLastRow As Long, fenSentCol As String
-        fenLastRow = wsFEN.Cells(wsFEN.Rows.Count, "A").End(xlUp).Row
-        fenSentCol = "D" ' Assuming "SENT ? (Yes/No)" is in column D
-        
-        With wsReport
-            .Range("G2").Formula = "=COUNTA('FEN Records'!A2:A" & fenLastRow & ")"
-            .Range("G3").Formula = "=COUNTIF('FEN Records'!" & fenSentCol & ":" & fenSentCol & ",""No"")"
-            .Range("G4").Formula = "=COUNTIF('FEN Records'!" & fenSentCol & ":" & fenSentCol & ",""No"")"
-            .Range("G5").Value = 0
-            .Range("G6").Value = 0
-            .Range("G7").Value = 0
-            .Range("G8").Formula = "=COUNTIF('FEN Records'!" & fenSentCol & ":" & fenSentCol & ",""Yes"")"
-            .Range("G9").Formula = "=G2-(G3+G8)"
-            .Range("G11").Formula = "=G3"
-            .Range("G12").Value = prevDayValueC3
-            .Range("G13").Formula = "=G11-G12"
-            .Range("G14").Formula = "=IFERROR(G13/G11,0)"
-            .Range("G14").NumberFormat = "0.00%"
-            .Range("G16").Formula = "=G2"
-            .Range("G17").Value = prevDayValueC2
-            .Range("G18").Formula = "=G16-G17"
-            .Columns("G:G").AutoFit
-            .Activate
-        End With
-    Else
-        MsgBox "Macro cancelled by user.", vbInformation
-    End If
+    '--- Part 3: Populate Column G ---
+    Dim fenLastRow As Long, fenSentCol As String
+    fenLastRow = wsFEN.Cells(wsFEN.Rows.Count, "A").End(xlUp).Row
+    fenSentCol = "D"
+    
+    With wsReport
+        .Range("G2").Formula = "=COUNTA('FEN Records'!A2:A" & fenLastRow & ")"
+        .Range("G3").Formula = "=COUNTIF('FEN Records'!" & fenSentCol & ":" & fenSentCol & ",""No"")"
+        .Range("G4").Formula = "=COUNTIF('FEN Records'!" & fenSentCol & ":" & fenSentCol & ",""No"")"
+        .Range("G5").Value = 0
+        .Range("G6").Value = 0
+        .Range("G7").Value = 0
+        .Range("G8").Formula = "=COUNTIF('FEN Records'!" & fenSentCol & ":" & fenSentCol & ",""Yes"")"
+        .Range("G9").Formula = "=G2-(G3+G8)"
+        .Range("G11").Formula = "=G3"
+        .Range("G12").Value = prevDayValueC3
+        .Range("G13").Formula = "=G11-G12"
+        .Range("G14").Formula = "=IFERROR(G13/G11,0)"
+        .Range("G14").NumberFormat = "0.00%"
+        .Range("G16").Formula = "=G2"
+        .Range("G17").Value = prevDayValueC2
+        .Range("G18").Formula = "=G16-G17"
+        .Columns("G:G").AutoFit
+        .Activate
+    End With
 
-EndMacro: ' This is our clean exit point
+EndMacro: ' Clean exit point
     '==================================================================================
     '===[ FINISH ]=====================================================================
     '==================================================================================
     
     Application.ScreenUpdating = True
-    If proceed Then
-        MsgBox "Process complete! Steps 1 to 6 have been successfully executed.", vbInformation
-    End If
+    MsgBox "Process complete! Steps 1 to 6 have been successfully executed.", vbInformation
 
 End Sub
