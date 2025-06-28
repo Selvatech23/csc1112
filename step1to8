@@ -1,6 +1,6 @@
 Option Explicit
 
-Sub ProcessReport_Steps_1_to_8_Final()
+Sub ProcessReport_Steps_1_to_8_CaseInsensitive()
 
     '==================================================================================
     '===[ SETUP & STEPS 1-7 - UNCHANGED ]==============================================
@@ -105,7 +105,7 @@ Sub ProcessReport_Steps_1_to_8_Final()
     wsSpace.Cells.EntireColumn.AutoFit
     
     '==================================================================================
-    '===[ STEP 8: FIND ADDED/REMOVED (WITH FORGIVING VLOOKUP-LIKE MATCHING) ]==========
+    '===[ STEP 8: FIND ADDED/REMOVED (CASE-INSENSITIVE FIX) ]==========================
     '==================================================================================
 
     Dim wsAdded As Worksheet, wsRemoved As Worksheet, wsPreviousFEN As Worksheet
@@ -134,16 +134,18 @@ Sub ProcessReport_Steps_1_to_8_Final()
             
             ' Find ADDED records
             Set dictPreviousIDs = CreateObject("Scripting.Dictionary")
+            '--- THE PERMANENT FIX: MAKE THE DICTIONARY CASE-INSENSITIVE ---
+            dictPreviousIDs.CompareMode = vbTextCompare
+            
             For i = 1 To UBound(previousData, 1)
-                '--- SUPERIOR FIX: Convert to clean string to make it forgiving, like VLOOKUP ---
-                key = Trim(CStr(previousData(i, 1)))
+                ' We will still Trim, as it's good practice
+                key = Trim(previousData(i, 1))
                 dictPreviousIDs(key) = 1
             Next i
             
             addedPasteRow = 2
             For i = 1 To UBound(currentData, 1)
-                '--- SUPERIOR FIX: Convert to clean string for comparison ---
-                key = Trim(CStr(currentData(i, 1)))
+                key = Trim(currentData(i, 1))
                 If Not dictPreviousIDs.Exists(key) Then
                     wsAdded.Range("A" & addedPasteRow).Resize(1, 5).Value = Application.Index(currentData, i, 0)
                     addedPasteRow = addedPasteRow + 1
@@ -152,16 +154,17 @@ Sub ProcessReport_Steps_1_to_8_Final()
             
             ' Find REMOVED records
             Set dictCurrentIDs = CreateObject("Scripting.Dictionary")
+            '--- THE PERMANENT FIX: MAKE THIS ONE CASE-INSENSITIVE TOO ---
+            dictCurrentIDs.CompareMode = vbTextCompare
+
             For i = 1 To UBound(currentData, 1)
-                '--- SUPERIOR FIX: Convert to clean string here too ---
-                key = Trim(CStr(currentData(i, 1)))
+                key = Trim(currentData(i, 1))
                 dictCurrentIDs(key) = 1
             Next i
             
             removedPasteRow = 2
             For i = 1 To UBound(previousData, 1)
-                '--- SUPERIOR FIX: And finally, convert to clean string here ---
-                key = Trim(CStr(previousData(i, 1)))
+                key = Trim(previousData(i, 1))
                 If Not dictCurrentIDs.Exists(key) Then
                     wsRemoved.Range("A" & removedPasteRow).Resize(1, 5).Value = Application.Index(previousData, i, 0)
                     removedPasteRow = removedPasteRow + 1
