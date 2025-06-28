@@ -1,34 +1,6 @@
+'--- ADDED AS REQUESTED: Convert formulas to values using Paste Special ---
+vlookupRange.Copy
+vlookupRange.PasteSpecial Paste:=xlPasteValues
 
-Sub Macro3()
-'
-' Macro3 Macro
-'
-
-'
-    ActiveWindow.SmallScroll Down:=5
-    Range("A21").Select
-    Range(Selection, Selection.End(xlDown)).Select
-    Selection.Copy
-    Sheets.Add After:=ActiveSheet
-    Sheets("Sheet5").Select
-    Sheets("Sheet5").Name = "Space issue"
-    ActiveSheet.Paste
-    Columns("A:A").Select
-    Selection.Replace What:="FEN-", Replacement:="", LookAt:=xlPart, _
-        SearchOrder:=xlByRows, MatchCase:=False, SearchFormat:=False, _
-        ReplaceFormat:=False, FormulaVersion:=xlReplaceFormula2
-    Columns("A:A").Select
-    Application.CutCopyMode = False
-    ActiveSheet.Range("$A$1:$A$102654").RemoveDuplicates Columns:=1, Header:= _
-        xlNo
-    Range("B1").Select
-    ActiveCell.FormulaR1C1 = "STATUS"
-    Range("B2").Select
-    ActiveCell.FormulaR1C1 = _
-        "=VLOOKUP(RC[-1],'[25062025.xlsm]Space issue'!C1:C2,2,0)"
-    Range("B2").Select
-    Selection.AutoFill Destination:=Range("B2:B95046")
-    Range("B2:B95046").Select
-    Range("B1").Select
-
-End Sub
+' This line clears the "marching ants" (the copy border) from the screen.
+Application.CutCopyMode = False
