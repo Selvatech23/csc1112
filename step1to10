@@ -1,6 +1,6 @@
 Option Explicit
 
-Sub ProcessReport_Steps_1_to_10()
+Sub ProcessReport_Steps_1_to_10_Fixed()
 
     '==================================================================================
     '===[ SETUP ]======================================================================
@@ -162,13 +162,15 @@ Sub ProcessReport_Steps_1_to_10()
     End If
     
     '==================================================================================
-    '===[ NEW STEP 10: IMPORT DATA FROM QLIKVIEW FILE ]================================
+    '===[ STEP 10: IMPORT DATA FROM QLIKVIEW FILE (CORRECTED) ]========================
     '==================================================================================
     
     Dim wsBDX As Worksheet
     Dim qlikviewFilePath As String
     Dim qlikviewWB As Workbook
     Dim sourceSheet As Worksheet
+    Dim qvLastRow As Long
+    Dim copyRange As Range
     
     ' Action 10.1: Get the Qlikview file path from Home!E12
     If Not wsHome Is Nothing Then
@@ -187,15 +189,18 @@ Sub ProcessReport_Steps_1_to_10()
             
             ' Action 10.3: Open Qlikview file, copy data, and close
             Set qlikviewWB = Workbooks.Open(qlikviewFilePath, ReadOnly:=True)
-            
-            ' Assuming the data is on the first sheet of the Qlikview file.
-            ' Change "qlikviewWB.Worksheets(1)" if it has a specific name.
             Set sourceSheet = qlikviewWB.Worksheets(1)
             
-            ' Copy columns F through N
-            sourceSheet.Range("F:N").Copy Destination:=wsBDX.Range("A1")
+            ' --- THE FIX IS HERE: Find the last row of data and define the specific range to copy ---
+            ' We'll check column F to determine the last row of data.
+            qvLastRow = sourceSheet.Cells(sourceSheet.Rows.Count, "F").End(xlUp).Row
             
-            ' Close the source file immediately
+            If qvLastRow > 0 Then
+                Set copyRange = sourceSheet.Range("F1:N" & qvLastRow)
+                copyRange.Copy Destination:=wsBDX.Range("A1")
+            End If
+            ' --- END OF FIX ---
+            
             qlikviewWB.Close SaveChanges:=False
             
             ' Action 10.4: Add new headers
@@ -204,7 +209,6 @@ Sub ProcessReport_Steps_1_to_10()
             wsBDX.Range("L1").Value = "Comparison"
             wsBDX.Range("M1").Value = "Comments"
             
-            ' Action 10.5: Autofit all columns
             wsBDX.Cells.EntireColumn.AutoFit
             wsBDX.Activate
         Else
