@@ -1,6 +1,6 @@
 Option Explicit
 
-Sub ProcessReport_Final_Reliable_Version()
+Sub ProcessReport_Final_With_New_Step7()
 
     '==================================================================================
     '===[ SETUP ]======================================================================
@@ -117,76 +117,79 @@ Sub ProcessReport_Final_Reliable_Version()
     End With
     
     '==================================================================================
-    '===[ STEP 7: POPULATE DATA (INTERACTIVE AND RELIABLE) ]===========================
+    '===[ NEW STEP 7: CREATE "Space issue" SHEET & VLOOKUP ]===========================
     '==================================================================================
     
-    Dim prevDayValueC2 As Variant, prevDayValueC3 As Variant
+    Dim wsSpace As Worksheet
+    Dim spaceSourceRange As Range
+    Dim spaceLastRow As Long
     
-    '--- Part 1: Ask user to select the previous day's file ---
-    MsgBox "You will now be asked to select the PREVIOUS DAY'S report file to fetch the summary values.", vbInformation, "Select Previous Day File"
+    ' Action 7.1: Create the "Space issue" sheet
+    Application.DisplayAlerts = False
+    On Error Resume Next
+    reportWB.Worksheets("Space issue").Delete
+    On Error GoTo 0
+    Application.DisplayAlerts = True
     
-    Dim fDialog As FileDialog
-    Dim prevDayPath As String
-    Dim prevDayWB As Workbook
+    Set wsSpace = reportWB.Worksheets.Add(After:=reportWB.Sheets(reportWB.Sheets.Count))
+    wsSpace.Name = "Space issue"
     
-    Set fDialog = Application.FileDialog(msoFileDialogFilePicker)
-    fDialog.Title = "Please Select the Previous Day's Report"
-    fDialog.Filters.Clear
-    fDialog.Filters.Add "Excel Files", "*.xlsx; *.xls; *.xlsm"
-    
-    ' Set default values to 0 in case the user cancels
-    prevDayValueC2 = 0
-    prevDayValueC3 = 0
-    
-    If fDialog.Show = -1 Then ' -1 means the user selected a file
-        prevDayPath = fDialog.SelectedItems(1)
+    ' Action 7.2: Copy data from GBCLM_REPORT (A22 to last row)
+    If lastRow > 21 Then
+        Set spaceSourceRange = wsReport.Range("A22:A" & lastRow)
+        spaceSourceRange.Copy Destination:=wsSpace.Range("A1")
         
-        ' Open the selected file, get values, and close it
-        Set prevDayWB = Workbooks.Open(prevDayPath, ReadOnly:=True)
-        On Error Resume Next ' In case sheet/cell doesn't exist in old file
-        prevDayValueC2 = prevDayWB.Worksheets("GBCLM_REPORT").Range("G2").Value
-        prevDayValueC3 = prevDayWB.Worksheets("GBCLM_REPORT").Range("G3").Value
-        On Error GoTo 0
-        prevDayWB.Close SaveChanges:=False
-    Else
-        ' User cancelled the dialog box
-        MsgBox "No file selected. Previous day's values will be set to 0.", vbExclamation
+        ' Action 7.3: Clean the data on the new sheet
+        With wsSpace.Columns("A:A")
+            .Replace What:="FEN-", Replacement:="", LookAt:=xlPart, MatchCase:=False
+            .RemoveDuplicates Columns:=1, Header:=xlNo
+        End With
+        
+        ' Action 7.4: Ask user to select the VLOOKUP source file
+        MsgBox "You will now be asked to select the file to use for the VLOOKUP.", vbInformation, "Select VLOOKUP Source File"
+        
+        Dim fDialog As FileDialog, lookupFilePath As String, lookupFileName As String
+        Set fDialog = Application.FileDialog(msoFileDialogFilePicker)
+        fDialog.Title = "Please Select the VLOOKUP Source File (e.g., 25062025.xlsm)"
+        fDialog.Filters.Clear
+        fDialog.Filters.Add "Excel Files", "*.xlsx; *.xls; *.xlsm"
+        
+        If fDialog.Show = -1 Then ' User selected a file
+            lookupFilePath = fDialog.SelectedItems(1)
+            ' Extract just the file name from the full path
+            lookupFileName = Mid(lookupFilePath, InStrRev(lookupFilePath, "\") + 1)
+            
+            ' Action 7.5: Add header and VLOOKUP formula
+            wsSpace.Range("B1").Value = "STATUS"
+            
+            spaceLastRow = wsSpace.Cells(wsSpace.Rows.Count, "A").End(xlUp).Row
+            If spaceLastRow > 1 Then
+                Dim vlookupRange As Range
+                Set vlookupRange = wsSpace.Range("B2:B" & spaceLastRow)
+                
+                ' NOTE: Your macro recorded a lookup range of C1:C2. This is usually too small.
+                ' I am using C:D as it is more common for a VLOOKUP. Change if needed.
+                vlookupRange.Formula = "=IFERROR(VLOOKUP(A2,'[" & lookupFileName & "]Space issue'!C:D,2,FALSE),""Not Found"")"
+                
+                ' Convert formulas to values to break the link to the other file
+                vlookupRange.Value = vlookupRange.Value
+            End If
+        Else
+            ' User cancelled the file selection
+            wsSpace.Range("B1").Value = "STATUS (VLOOKUP cancelled)"
+        End If
+        
+        ' Action 7.6: Autofit the columns
+        wsSpace.Cells.EntireColumn.AutoFit
+        wsSpace.Activate
     End If
     
-    '--- Part 2: Populate Column G with all formulas and values ---
-    Dim fenLastRow As Long, fenSentCol As String
-    fenLastRow = wsFEN.Cells(wsFEN.Rows.Count, "A").End(xlUp).Row
-    fenSentCol = "D" ' Assuming "SENT ? (Yes/No)" is in column D of FEN Records
-    
-    With wsReport
-        .Activate
-        .Range("G2").Formula = "=COUNTA('FEN Records'!A2:A" & fenLastRow & ")"
-        .Range("G3").Formula = "=COUNTIF('FEN Records'!" & fenSentCol & ":" & fenSentCol & ",""No"")"
-        .Range("G4").Formula = .Range("G3").Formula
-        .Range("G5").Value = 0
-        .Range("G6").Value = 0
-        .Range("G7").Value = 0
-        .Range("G8").Formula = "=COUNTIF('FEN Records'!" & fenSentCol & ":" & fenSentCol & ",""Yes"")"
-        .Range("G9").Formula = "=G2-(G3+G8)"
-        
-        .Range("G11").Formula = "=G3"
-        .Range("G12").Value = prevDayValueC3
-        .Range("G13").Formula = "=G11-G12"
-        .Range("G14").Formula = "=IFERROR(G13/G11, 0)"
-        .Range("G14").NumberFormat = "0.00%"
-        
-        .Range("G16").Formula = "=G2"
-        .Range("G17").Value = prevDayValueC2
-        .Range("G18").Formula = "=G16-G17"
-        
-        .Columns("G:G").AutoFit
-    End With
-    
+
     '==================================================================================
     '===[ FINISH ]=====================================================================
     '==================================================================================
     
     Application.ScreenUpdating = True
-    MsgBox "Process complete! All 7 steps executed successfully.", vbInformation
+    MsgBox "Process complete! All steps, including the new Step 7, executed successfully.", vbInformation
 
 End Sub
