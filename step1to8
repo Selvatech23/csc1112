@@ -1,6 +1,6 @@
 Option Explicit
 
-Sub ProcessReport_Steps_1_to_8_CaseInsensitive()
+Sub ProcessReport_Final_Guaranteed_Match()
 
     '==================================================================================
     '===[ SETUP & STEPS 1-7 - UNCHANGED ]==============================================
@@ -105,13 +105,13 @@ Sub ProcessReport_Steps_1_to_8_CaseInsensitive()
     wsSpace.Cells.EntireColumn.AutoFit
     
     '==================================================================================
-    '===[ STEP 8: FIND ADDED/REMOVED (CASE-INSENSITIVE FIX) ]==========================
+    '===[ STEP 8: FIND ADDED/REMOVED (USING EXCEL'S MATCH FUNCTION) ]==================
     '==================================================================================
 
     Dim wsAdded As Worksheet, wsRemoved As Worksheet, wsPreviousFEN As Worksheet
-    Dim dictPreviousIDs As Object, dictCurrentIDs As Object
-    Dim currentData As Variant, previousData As Variant
-    Dim i As Long, addedPasteRow As Long, removedPasteRow As Long, key As String
+    Dim i As Long, addedPasteRow As Long, removedPasteRow As Long
+    Dim currentIDRange As Range, previousIDRange As Range
+    Dim matchResult As Variant
     
     Application.DisplayAlerts = False: On Error Resume Next
     reportWB.Worksheets("Added").Delete: reportWB.Worksheets("Removed").Delete
@@ -129,44 +129,32 @@ Sub ProcessReport_Steps_1_to_8_CaseInsensitive()
         If wsPreviousFEN Is Nothing Then
             MsgBox "Could not find 'FEN Records' sheet in previous day's file.", vbExclamation: prevDayWB.Close False
         Else
-            currentData = wsFEN.Range("A2:E" & wsFEN.Cells(wsFEN.Rows.Count, "A").End(xlUp).Row).Value
-            previousData = wsPreviousFEN.Range("A2:E" & wsPreviousFEN.Cells(wsPreviousFEN.Rows.Count, "A").End(xlUp).Row).Value
+            ' Define the ID ranges to search within
+            Set currentIDRange = wsFEN.Range("A2:A" & wsFEN.Cells(wsFEN.Rows.Count, "A").End(xlUp).Row)
+            Set previousIDRange = wsPreviousFEN.Range("A2:A" & wsPreviousFEN.Cells(wsPreviousFEN.Rows.Count, "A").End(xlUp).Row)
             
-            ' Find ADDED records
-            Set dictPreviousIDs = CreateObject("Scripting.Dictionary")
-            '--- THE PERMANENT FIX: MAKE THE DICTIONARY CASE-INSENSITIVE ---
-            dictPreviousIDs.CompareMode = vbTextCompare
-            
-            For i = 1 To UBound(previousData, 1)
-                ' We will still Trim, as it's good practice
-                key = Trim(previousData(i, 1))
-                dictPreviousIDs(key) = 1
-            Next i
-            
+            '--- Find ADDED records ---
             addedPasteRow = 2
-            For i = 1 To UBound(currentData, 1)
-                key = Trim(currentData(i, 1))
-                If Not dictPreviousIDs.Exists(key) Then
-                    wsAdded.Range("A" & addedPasteRow).Resize(1, 5).Value = Application.Index(currentData, i, 0)
+            For i = 2 To wsFEN.Cells(wsFEN.Rows.Count, "A").End(xlUp).Row
+                ' Try to find today's ID in the previous day's list
+                matchResult = Application.Match(wsFEN.Cells(i, "A").Value, previousIDRange, 0)
+                
+                If IsError(matchResult) Then
+                    ' If it's an error, the ID was NOT found. It's ADDED.
+                    wsFEN.Rows(i).Copy wsAdded.Rows(addedPasteRow)
                     addedPasteRow = addedPasteRow + 1
                 End If
             Next i
             
-            ' Find REMOVED records
-            Set dictCurrentIDs = CreateObject("Scripting.Dictionary")
-            '--- THE PERMANENT FIX: MAKE THIS ONE CASE-INSENSITIVE TOO ---
-            dictCurrentIDs.CompareMode = vbTextCompare
-
-            For i = 1 To UBound(currentData, 1)
-                key = Trim(currentData(i, 1))
-                dictCurrentIDs(key) = 1
-            Next i
-            
+            '--- Find REMOVED records ---
             removedPasteRow = 2
-            For i = 1 To UBound(previousData, 1)
-                key = Trim(previousData(i, 1))
-                If Not dictCurrentIDs.Exists(key) Then
-                    wsRemoved.Range("A" & removedPasteRow).Resize(1, 5).Value = Application.Index(previousData, i, 0)
+            For i = 2 To wsPreviousFEN.Cells(wsPreviousFEN.Rows.Count, "A").End(xlUp).Row
+                ' Try to find yesterday's ID in today's list
+                matchResult = Application.Match(wsPreviousFEN.Cells(i, "A").Value, currentIDRange, 0)
+                
+                If IsError(matchResult) Then
+                    ' If it's an error, the ID was NOT found. It's REMOVED.
+                    wsPreviousFEN.Rows(i).Copy wsRemoved.Rows(removedPasteRow)
                     removedPasteRow = removedPasteRow + 1
                 End If
             Next i
