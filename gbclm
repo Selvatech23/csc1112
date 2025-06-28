@@ -1,0 +1,60 @@
+Option Explicit
+
+Sub ProcessReport_Step1()
+
+    '===[ SETUP ]===
+    ' This ensures our macro runs on the currently active sheet.
+    ' We declare a "ws" variable to hold a reference to the sheet.
+    ' This is safer than using "ActiveSheet" repeatedly.
+    Dim ws As Worksheet
+    Set ws = ActiveSheet
+    
+    ' This line prevents screen flickering and can make the macro run faster.
+    Application.ScreenUpdating = False
+
+    '===[ ACTION 1: PARSE DATA USING TEXT TO COLUMNS ]===
+    ' This performs "Text to Columns" on all of Column A.
+    ' It uses the pipe "|" symbol as the delimiter.
+    ws.Columns("A:A").TextToColumns Destination:=ws.Range("A1"), _
+                                  DataType:=xlDelimited, _
+                                  TextQualifier:=xlDoubleQuote, _
+                                  ConsecutiveDelimiter:=False, _
+                                  Tab:=False, _
+                                  Semicolon:=False, _
+                                  Comma:=False, _
+                                  Space:=False, _
+                                  Other:=True, _
+                                  OtherChar:="|"
+
+    '===[ ACTION 2: DELETE THE FIRST COLUMN ]===
+    ' After the split, the original data is gone. The first piece of each
+    ' text string (before the first "|") is now in Column A.
+    ' We delete this entire column, which shifts all other columns to the left.
+    ws.Columns("A:A").Delete
+
+    '===[ ACTION 3: AUTOFIT COLUMN WIDTHS ]===
+    ' This adjusts the width of all columns on the sheet to fit the new content.
+    ws.Cells.EntireColumn.AutoFit
+
+    '===[ ACTION 4: RENAME THE WORKSHEET ]===
+    ' This renames the active sheet to "GBCLM_REPORT".
+    ' It includes error handling in case another sheet in the workbook
+    ' is already named "GBCLM_REPORT".
+    If ws.Name <> "GBCLM_REPORT" Then
+        On Error Resume Next ' Temporarily ignore errors
+        ws.Name = "GBCLM_REPORT"
+        If Err.Number <> 0 Then
+            MsgBox "Could not rename the sheet to 'GBCLM_REPORT'." & vbCrLf & _
+                   "A different sheet might already have that name.", vbExclamation
+            Err.Clear ' Clear the error
+        End If
+        On Error GoTo 0 ' Return to normal error handling
+    End If
+
+    ' Turn screen updating back on
+    Application.ScreenUpdating = True
+    
+    ' Let the user know the step is complete
+    MsgBox "Step 1 has been successfully completed.", vbInformation
+
+End Sub
