@@ -1,6 +1,6 @@
 Option Explicit
 
-Sub ProcessReport_Steps_1_to_7_Auto()
+Sub ProcessReport_Steps_1_to_7_New()
 
     '==================================================================================
     '===[ SETUP ]======================================================================
@@ -18,7 +18,7 @@ Sub ProcessReport_Steps_1_to_7_Auto()
     Dim lastRow As Long
 
     '==================================================================================
-    '===[ STEP 1-6 (ALL UNTOUCHED AND WORKING) ]=======================================
+    '===[ STEPS 1-6 (ALL UNTOUCHED AND WORKING) ]======================================
     '==================================================================================
 
     '--- Step 1 ---
@@ -39,7 +39,7 @@ Sub ProcessReport_Steps_1_to_7_Auto()
     '--- Step 2 ---
     Application.DisplayAlerts = False: On Error Resume Next
     reportWB.Worksheets("FEN Records").Delete
-    On Error GoTo 0: Application.DisplayAlerts = True
+    On Error Go-To 0: Application.DisplayAlerts = True
     Set wsFEN = reportWB.Worksheets.Add(After:=wsReport)
     wsFEN.Name = "FEN Records"
     wsReport.Range("A21:E21").Copy wsFEN.Range("A1")
@@ -118,79 +118,106 @@ Sub ProcessReport_Steps_1_to_7_Auto()
     End With
     
     '==================================================================================
-    '===[ STEP 7: POPULATE DATA (FETCHING PATH FROM 'Home' SHEET) ]====================
+    '===[ STEP 7: POPULATE DATA (NEW "BULLETPROOF" VERSION) ]==========================
     '==================================================================================
     
     Dim prevDayValueC2 As Variant, prevDayValueC3 As Variant
-    prevDayValueC2 = 0 ' Default value
-    prevDayValueC3 = 0 ' Default value
+    Dim folderPath As String, wsHome As Worksheet, proceed As Boolean
     
-    '--- Part 1: Get path from 'Home' sheet and fetch data ---
-    Dim folderPath As String, prevDayPath As String, prevDayDate As Date, prevDayWB As Workbook, wsHome As Worksheet
-    
+    '--- Part 1: Check for 'Home' sheet and path in cell E10 ---
     On Error Resume Next
     Set wsHome = macroWB.Worksheets("Home")
     On Error GoTo 0
     
     If wsHome Is Nothing Then
-        MsgBox "Configuration Error:" & vbCrLf & "A sheet named 'Home' was not found in the macro workbook.", vbCritical
+        MsgBox "CONFIGURATION ERROR:" & vbCrLf & "A sheet named 'Home' was not found in your macro workbook. Step 7 cannot run.", vbCritical
+        GoTo EndMacro ' Exit the macro cleanly
+    End If
+    
+    folderPath = wsHome.Range("E10").Value
+    If folderPath = "" Then
+        MsgBox "CONFIGURATION ERROR:" & vbCrLf & "Cell E10 on the 'Home' sheet is empty. Please provide the folder path. Step 7 cannot run.", vbCritical
+        GoTo EndMacro ' Exit the macro cleanly
+    End If
+    
+    '--- Part 2: Find and Open Previous Day's File ---
+    Dim prevDayPath As String, prevDayDate As Date, prevDayWB As Workbook
+    proceed = False ' Set a flag
+    
+    ' Default values in case we can't get the data
+    prevDayValueC2 = 0
+    prevDayValueC3 = 0
+
+    If Right(folderPath, 1) <> "\" Then folderPath = folderPath & "\"
+    prevDayDate = Date - 1
+    Do While Weekday(prevDayDate, vbMonday) > 5
+        prevDayDate = prevDayDate - 1
+    Loop
+    prevDayPath = folderPath & Format(prevDayDate, "ddmmyyyy") & ".xlsx"
+    
+    If Dir(prevDayPath) <> "" Then
+        ' File was found, open it
+        Set prevDayWB = Workbooks.Open(prevDayPath, ReadOnly:=True)
+        On Error Resume Next
+        prevDayValueC2 = prevDayWB.Worksheets("GBCLM_REPORT").Range("G2").Value
+        prevDayValueC3 = prevDayWB.Worksheets("GBCLM_REPORT").Range("G3").Value
+        If Err.Number <> 0 Then
+             MsgBox "ERROR: Could not read values from 'GBCLM_REPORT' sheet in the previous day's file.", vbExclamation
+             ' Values will remain 0
+        End If
+        On Error GoTo 0
+        prevDayWB.Close SaveChanges:=False
+        proceed = True
     Else
-        folderPath = wsHome.Range("E10").Value
-        If folderPath = "" Then
-            MsgBox "Configuration Error:" & vbCrLf & "Cell E10 on the 'Home' sheet is empty. Please provide a folder path.", vbExclamation
+        ' File was NOT found, ask the user what to do
+        Dim userResponse As VbMsgBoxResult
+        userResponse = MsgBox("Previous day's file was not found at:" & vbCrLf & prevDayPath & vbCrLf & vbCrLf & _
+                              "Do you want to continue with '0' for previous day's values?", vbQuestion + vbYesNo, "File Not Found")
+        If userResponse = vbYes Then
+            proceed = True ' User chose to continue
         Else
-            ' Check if the last character is a backslash, add it if not.
-            If Right(folderPath, 1) <> "\" Then folderPath = folderPath & "\"
-            
-            prevDayDate = Date - 1
-            Do While Weekday(prevDayDate, vbMonday) > 5
-                prevDayDate = prevDayDate - 1
-            Loop
-            
-            prevDayPath = folderPath & Format(prevDayDate, "ddmmyyyy") & ".xlsx"
-            
-            If Dir(prevDayPath) <> "" Then
-                Set prevDayWB = Workbooks.Open(prevDayPath, ReadOnly:=True)
-                prevDayValueC2 = prevDayWB.Worksheets("GBCLM_REPORT").Range("G2").Value
-                prevDayValueC3 = prevDayWB.Worksheets("GBCLM_REPORT").Range("G3").Value
-                prevDayWB.Close SaveChanges:=False
-            Else
-                MsgBox "File Not Found:" & vbCrLf & "Could not find the previous day's report at:" & vbCrLf & prevDayPath, vbExclamation
-            End If
+            proceed = False ' User chose to cancel
         End If
     End If
 
-    '--- Part 2: Populate Column G in the GBCLM_REPORT sheet ---
-    Dim fenLastRow As Long, fenSentCol As String
-    fenLastRow = wsFEN.Cells(wsFEN.Rows.Count, "A").End(xlUp).Row
-    fenSentCol = "D" ' Assuming "SENT ? (Yes/No)" is in column D of FEN Records
-    
-    With wsReport
-        .Range("G2").Formula = "=COUNTA('FEN Records'!A2:A" & fenLastRow & ")"
-        .Range("G3").Formula = "=COUNTIF('FEN Records'!" & fenSentCol & ":" & fenSentCol & ",""No"")"
-        .Range("G4").Formula = "=COUNTIF('FEN Records'!" & fenSentCol & ":" & fenSentCol & ",""No"")"
-        .Range("G5").Value = 0
-        .Range("G6").Value = 0
-        .Range("G7").Value = 0
-        .Range("G8").Formula = "=COUNTIF('FEN Records'!" & fenSentCol & ":" & fenSentCol & ",""Yes"")"
-        .Range("G9").Formula = "=G2-(G3+G8)"
-        .Range("G11").Formula = "=G3"
-        .Range("G12").Value = prevDayValueC3
-        .Range("G13").Formula = "=G11-G12"
-        .Range("G14").Formula = "=IFERROR(G13/G11,0)" ' Better way to prevent divide-by-zero
-        .Range("G14").NumberFormat = "0.00%"
-        .Range("G16").Formula = "=G2"
-        .Range("G17").Value = prevDayValueC2
-        .Range("G18").Formula = "=G16-G17"
-        .Columns("G:G").AutoFit
-        .Activate
-    End With
-    
+    '--- Part 3: Populate Column G only if we are cleared to proceed ---
+    If proceed Then
+        Dim fenLastRow As Long, fenSentCol As String
+        fenLastRow = wsFEN.Cells(wsFEN.Rows.Count, "A").End(xlUp).Row
+        fenSentCol = "D" ' Assuming "SENT ? (Yes/No)" is in column D
+        
+        With wsReport
+            .Range("G2").Formula = "=COUNTA('FEN Records'!A2:A" & fenLastRow & ")"
+            .Range("G3").Formula = "=COUNTIF('FEN Records'!" & fenSentCol & ":" & fenSentCol & ",""No"")"
+            .Range("G4").Formula = "=COUNTIF('FEN Records'!" & fenSentCol & ":" & fenSentCol & ",""No"")"
+            .Range("G5").Value = 0
+            .Range("G6").Value = 0
+            .Range("G7").Value = 0
+            .Range("G8").Formula = "=COUNTIF('FEN Records'!" & fenSentCol & ":" & fenSentCol & ",""Yes"")"
+            .Range("G9").Formula = "=G2-(G3+G8)"
+            .Range("G11").Formula = "=G3"
+            .Range("G12").Value = prevDayValueC3
+            .Range("G13").Formula = "=G11-G12"
+            .Range("G14").Formula = "=IFERROR(G13/G11,0)"
+            .Range("G14").NumberFormat = "0.00%"
+            .Range("G16").Formula = "=G2"
+            .Range("G17").Value = prevDayValue-C2
+            .Range("G18").Formula = "=G16-G17"
+            .Columns("G:G").AutoFit
+            .Activate
+        End With
+    Else
+        MsgBox "Macro cancelled by user.", vbInformation
+    End If
+
+EndMacro: ' This is our clean exit point
     '==================================================================================
     '===[ FINISH ]=====================================================================
     '==================================================================================
     
     Application.ScreenUpdating = True
-    MsgBox "Process complete! All 7 steps executed successfully.", vbInformation
+    If proceed Then
+        MsgBox "Process complete! All 7 steps executed successfully.", vbInformation
+    End If
 
 End Sub
