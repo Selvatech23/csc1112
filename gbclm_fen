@@ -11,11 +11,6 @@ Sub ProcessReport_Combined()
     Dim wsReport As Worksheet
     Set wsReport = ActiveSheet
     
-    '--- CORRECTED BASED ON YOUR FEEDBACK ---
-    ' Headers are in Row 21, and data starts in Row 22.
-    Const HeaderRow As Long = 21
-    
-
     '==================================================================================
     '===[ STEP 1: PARSE AND PREPARE "GBCLM_REPORT" SHEET ]=============================
     '==================================================================================
@@ -35,7 +30,6 @@ Sub ProcessReport_Combined()
     ' Action 1.2: Delete the now-empty first column
     wsReport.Columns("A:A").Delete
     
-    '--- ADDED BASED ON YOUR FEEDBACK ---
     ' Action 1.3: Autofit column widths immediately after parsing
     wsReport.Cells.EntireColumn.AutoFit
     
@@ -55,44 +49,15 @@ Sub ProcessReport_Combined()
     
 
     '==================================================================================
-    '===[ STEP 2: CREATE "FEN Records" SHEET ]=========================================
+    '===[ STEP 2: CREATE "FEN Records" SHEET (NEW LOGIC) ]=============================
     '==================================================================================
     
     Dim wsFEN As Worksheet
-    Dim filterRange As Range
-    Dim dataRange As Range
     Dim lastRow As Long
-    Dim lastCol As Long
-    Dim cisCodeCol As Variant
+    Dim i As Long
+    Dim nextPasteRow As Long
     
-    ' Action 2.1: Find the last row and column to define our data area
-    ' We use Column A to find the last row.
-    lastRow = wsReport.Cells(wsReport.Rows.Count, "A").End(xlUp).Row
-    ' We use the corrected HeaderRow to find the last column.
-    lastCol = wsReport.Cells(HeaderRow, wsReport.Columns.Count).End(xlToLeft).Column
-    
-    ' Check if there is any data below the header row
-    If lastRow <= HeaderRow Then
-        MsgBox "No data found below the header row (Row " & HeaderRow & ") on the 'GBCLM_REPORT' sheet.", vbInformation
-        Application.ScreenUpdating = True
-        Exit Sub
-    End If
-    
-    ' Action 2.2: Find the column named "CIS CODE" in the header row (now checking Row 21)
-    ' NOTE: This search is case-sensitive and must be an exact match.
-    ' Check for extra spaces like "CIS CODE " or typos.
-    On Error Resume Next
-    cisCodeCol = Application.Match("CIS CODE", wsReport.Rows(HeaderRow), 0)
-    On Error GoTo 0
-    
-    If IsError(cisCodeCol) Then
-        MsgBox "Could not find a column named 'CIS CODE' in Row " & HeaderRow & "." & vbCrLf & _
-               "Please check the header name for typos or extra spaces. Aborting macro.", vbCritical
-        Application.ScreenUpdating = True
-        Exit Sub
-    End If
-    
-    ' Action 2.3: Prepare the "FEN Records" sheet (delete if it exists, then create new)
+    ' Action 2.1: Prepare the "FEN Records" sheet (delete if it exists, then create new)
     Application.DisplayAlerts = False
     On Error Resume Next
     ThisWorkbook.Worksheets("FEN Records").Delete
@@ -102,39 +67,44 @@ Sub ProcessReport_Combined()
     Set wsFEN = ThisWorkbook.Worksheets.Add(After:=wsReport)
     wsFEN.Name = "FEN Records"
     
-    ' Action 2.4: Apply the filter
-    wsReport.AutoFilterMode = False ' Ensure no old filters are active
-    Set filterRange = wsReport.Range(wsReport.Cells(HeaderRow, 1), wsReport.Cells(lastRow, lastCol))
-    ' Filter on the "CIS CODE" column for values starting with "FEN-"
-    filterRange.AutoFilter Field:=cisCodeCol, Criteria1:="FEN-*"
+    ' Action 2.2: Copy the specific header range (A21:E21) to the new sheet
+    wsReport.Range("A21:E21").Copy Destination:=wsFEN.Range("A1")
     
-    ' Action 2.5: Copy the visible (filtered) data to the new sheet
-    On Error Resume Next
-    Set dataRange = filterRange.SpecialCells(xlCellTypeVisible)
-    On Error GoTo 0
+    ' Action 2.3: Loop through data and copy rows that match the criteria
+    ' Find the last row with data in Column A of the report sheet
+    lastRow = wsReport.Cells(wsReport.Rows.Count, "A").End(xlUp).Row
     
-    If Not dataRange Is Nothing And dataRange.Rows.Count > 1 Then ' More than just the header row
-        dataRange.Copy Destination:=wsFEN.Range("A1")
+    ' The first row to paste data into on the FEN sheet will be row 2
+    nextPasteRow = 2
+    
+    ' Loop from the first data row (22) to the last row
+    For i = 22 To lastRow
+        ' Check if the cell value in Column A starts with "FEN-".
+        ' The "Like" operator with a wildcard "*" is perfect for this.
+        If wsReport.Cells(i, "A").Value Like "FEN-*" Then
+            
+            ' If it matches, copy the associated values from that row (Columns A to E)
+            wsReport.Range("A" & i & ":E" & i).Copy Destination:=wsFEN.Range("A" & nextPasteRow)
+            
+            ' Increment the counter for the next paste location on the "FEN Records" sheet
+            nextPasteRow = nextPasteRow + 1
+        End If
+    Next i
+    
+    ' Action 2.4: Check if any records were copied and then format the sheet
+    If nextPasteRow > 2 Then
+        ' Records were found and copied, so autofit the columns on the new sheet
+        wsFEN.Cells.EntireColumn.AutoFit
     Else
-        MsgBox "No records with a 'CIS CODE' starting with 'FEN-' were found.", vbInformation
+        ' No records were found, inform the user and delete the empty sheet
+        MsgBox "No records starting with 'FEN-' were found in Column A.", vbInformation
         Application.DisplayAlerts = False
-        wsFEN.Delete ' Delete the empty "FEN Records" sheet
+        wsFEN.Delete
         Application.DisplayAlerts = True
     End If
     
-    ' Action 2.6: Clean up by removing the filter from the "GBCLM_REPORT" sheet
-    wsReport.AutoFilterMode = False
-    
-    ' Action 2.7: Final autofit on the new "FEN Records" sheet
-    If Not wsFEN Is Nothing Then
-        On Error Resume Next ' In case sheet was deleted
-        If wsFEN.UsedRange.Cells.Count > 0 Then
-            wsFEN.Cells.EntireColumn.AutoFit
-        End If
-        On Error GoTo 0
-    End If
-    
-    wsReport.Activate ' Bring the main report sheet back into view
+    ' Bring the main report sheet back into view
+    wsReport.Activate
 
     '==================================================================================
     '===[ FINISH ]=====================================================================
@@ -142,7 +112,7 @@ Sub ProcessReport_Combined()
 
     Application.ScreenUpdating = True
     MsgBox "Process complete!" & vbCrLf & vbCrLf & _
-           "Step 1: Data parsed and autofitted on 'GBCLM_REPORT' sheet." & vbCrLf & _
-           "Step 2: 'FEN Records' sheet created with filtered data.", vbInformation
+           "Step 1: Data parsed on 'GBCLM_REPORT' sheet." & vbCrLf & _
+           "Step 2: 'FEN Records' sheet created with specific data.", vbInformation
 
 End Sub
