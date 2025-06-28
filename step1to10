@@ -1,6 +1,6 @@
 Option Explicit
 
-Sub ProcessReport_Steps_1_to_10_Fixed()
+Sub ProcessReport_Steps_1_to_10_Final()
 
     '==================================================================================
     '===[ SETUP ]======================================================================
@@ -20,7 +20,7 @@ Sub ProcessReport_Steps_1_to_10_Fixed()
     '==================================================================================
     '===[ STEPS 1-9 (THE STABLE, WORKING BASE) ]=======================================
     '==================================================================================
-    '--- Steps 1 through 9 are completely unchanged. ---
+    '--- Steps 1 through 9 are completely unchanged and use the correct cell references. ---
     
     ' (Full, unabridged code for steps 1-9 is included below for copy-pasting convenience)
     wsReport.Columns("A:A").TextToColumns Destination:=wsReport.Range("A1"), DataType:=xlDelimited, TextQualifier:=xlDoubleQuote, ConsecutiveDelimiter:=False, Tab:=False, Semicolon:=False, Comma:=False, Space:=False, Other:=True, OtherChar:="|"
@@ -174,15 +174,14 @@ Sub ProcessReport_Steps_1_to_10_Fixed()
     
     ' Action 10.1: Get the Qlikview file path from Home!E12
     If Not wsHome Is Nothing Then
+        '--- THE FIX IS HERE: Reading the path from cell E12 ---
         qlikviewFilePath = wsHome.Range("E12").Value
         
         If qlikviewFilePath <> "" And Dir(qlikviewFilePath) <> "" Then
             ' Action 10.2: Create the "Approved BDX" sheet
-            Application.DisplayAlerts = False
-            On Error Resume Next
+            Application.DisplayAlerts = False: On Error Resume Next
             reportWB.Worksheets("Approved BDX").Delete
-            On Error GoTo 0
-            Application.DisplayAlerts = True
+            On Error GoTo 0: Application.DisplayAlerts = True
             
             Set wsBDX = reportWB.Worksheets.Add(After:=reportWB.Sheets(reportWB.Sheets.Count))
             wsBDX.Name = "Approved BDX"
@@ -191,15 +190,11 @@ Sub ProcessReport_Steps_1_to_10_Fixed()
             Set qlikviewWB = Workbooks.Open(qlikviewFilePath, ReadOnly:=True)
             Set sourceSheet = qlikviewWB.Worksheets(1)
             
-            ' --- THE FIX IS HERE: Find the last row of data and define the specific range to copy ---
-            ' We'll check column F to determine the last row of data.
             qvLastRow = sourceSheet.Cells(sourceSheet.Rows.Count, "F").End(xlUp).Row
-            
             If qvLastRow > 0 Then
                 Set copyRange = sourceSheet.Range("F1:N" & qvLastRow)
                 copyRange.Copy Destination:=wsBDX.Range("A1")
             End If
-            ' --- END OF FIX ---
             
             qlikviewWB.Close SaveChanges:=False
             
@@ -212,7 +207,7 @@ Sub ProcessReport_Steps_1_to_10_Fixed()
             wsBDX.Cells.EntireColumn.AutoFit
             wsBDX.Activate
         Else
-            MsgBox "Step 10 was skipped because the Qlikview file path in Home!E12 is missing or invalid.", vbExclamation
+            MsgBox "Step 10 was skipped because the file path in Home!E12 is missing or invalid.", vbExclamation
         End If
     End If
 
