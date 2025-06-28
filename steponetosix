@@ -98,47 +98,50 @@ Sub ProcessReport_Final_Working_Version()
     End If
     
     '==================================================================================
-    '===[ STEP 6: POPULATE DATA (WITH AUTOMATIC PATH FIX) ]============================
+    '===[ STEP 6: POPULATE DATA (USING EXACT FILE PATH FROM E10) ]=====================
     '==================================================================================
     
-    Dim prevDayValueC2 As Variant, prevDayValueC3 As Variant, folderPath As String, wsHome As Worksheet
+    Dim prevDayValueC2 As Variant, prevDayValueC3 As Variant, filePathFromCell As String, wsHome As Worksheet
     
-    '--- Part 1: Get path from 'Home' sheet and automatically fix it ---
+    '--- Part 1: Get the EXACT file path from 'Home' sheet cell E10 ---
     On Error Resume Next
     Set wsHome = macroWB.Worksheets("Home")
     On Error GoTo 0
     
-    If wsHome Is Nothing Then GoTo EndMacro
-    folderPath = wsHome.Range("E10").Value
-    If folderPath = "" Then GoTo EndMacro
-    
-    '--- THE PERMANENT FIX IS HERE ---
-    ' Check if the user entered a full file path by mistake. If so, strip the filename.
-    If Right(LCase(folderPath), 5) = ".xlsx" Or Right(LCase(folderPath), 5) = ".xlsm" Then
-        folderPath = Left(folderPath, InStrRev(folderPath, "\") - 1)
-    End If
-    '--- END OF FIX ---
-    
-    '--- Part 2: Find and Open Previous Day's File ---
-    Dim prevDayPath As String, prevDayDate As Date, prevDayWB As Workbook
+    ' Default values to 0 in case we cannot get the data
     prevDayValueC2 = 0
     prevDayValueC3 = 0
-
-    If Right(folderPath, 1) <> "\" Then folderPath = folderPath & "\"
-    prevDayDate = Date - 1
-    Do While Weekday(prevDayDate, vbMonday) > 5
-        prevDayDate = prevDayDate - 1
-    Loop
-    prevDayPath = folderPath & Format(prevDayDate, "ddmmyyyy") & ".xlsx"
     
-    If Dir(prevDayPath) <> "" Then
-        Set prevDayWB = Workbooks.Open(prevDayPath, ReadOnly:=True)
-        prevDayValueC2 = prevDayWB.Worksheets("GBCLM_REPORT").Range("G2").Value
-        prevDayValueC3 = prevDayWB.Worksheets("GBCLM_REPORT").Range("G3").Value
-        prevDayWB.Close SaveChanges:=False
+    If wsHome Is Nothing Then
+        MsgBox "Configuration Error: A sheet named 'Home' was not found in your macro workbook.", vbCritical
+    Else
+        filePathFromCell = wsHome.Range("E10").Value
+        If filePathFromCell = "" Then
+            MsgBox "Configuration Error: Cell E10 on the 'Home' sheet is empty. Please provide the full file path.", vbExclamation
+        Else
+            '--- THE PERMANENT, SIMPLE FIX IS HERE ---
+            ' We will use the exact path from the cell, with no modifications or calculations.
+            
+            If Dir(filePathFromCell) <> "" Then
+                ' The file exists, so open it, get values, and close it.
+                Dim prevDayWB As Workbook
+                Set prevDayWB = Workbooks.Open(filePathFromCell, ReadOnly:=True)
+                
+                On Error Resume Next ' In case the sheet or cell doesn't exist in the target file
+                prevDayValueC2 = prevDayWB.Worksheets("GBCLM_REPORT").Range("G2").Value
+                prevDayValueC3 = prevDayWB.Worksheets("GBCLM_REPORT").Range("G3").Value
+                On Error GoTo 0
+                
+                prevDayWB.Close SaveChanges:=False
+            Else
+                ' The specific file listed in E10 was not found.
+                MsgBox "File Not Found:" & vbCrLf & "The exact file path specified in cell E10 could not be found." & vbCrLf & vbCrLf & _
+                       "Path looked for: " & filePathFromCell, vbCritical
+            End If
+        End If
     End If
 
-    '--- Part 3: Populate Column G ---
+    '--- Part 2: Populate Column G with the fetched values (or 0 if not found) ---
     Dim fenLastRow As Long, fenSentCol As String
     fenLastRow = wsFEN.Cells(wsFEN.Rows.Count, "A").End(xlUp).Row
     fenSentCol = "D"
@@ -162,7 +165,6 @@ Sub ProcessReport_Final_Working_Version()
         .Activate
     End With
 
-EndMacro:
     '==================================================================================
     '===[ FINISH ]=====================================================================
     '==================================================================================
