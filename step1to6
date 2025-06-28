@@ -1,6 +1,6 @@
 Option Explicit
 
-Sub ProcessReport_Steps_1_to_6()
+Sub ProcessReport_Steps_1_to_6_Complete()
 
     '==================================================================================
     '===[ SETUP ]======================================================================
@@ -18,10 +18,9 @@ Sub ProcessReport_Steps_1_to_6()
     Dim wsUniqueCIS As Worksheet
     
     '==================================================================================
-    '===[ STEP 1, 2, 3, 4, 5 (ALL UNTOUCHED AND WORKING) ]==============================
+    '===[ STEP 1: PARSE AND PREPARE "GBCLM_REPORT" SHEET ]=============================
     '==================================================================================
     
-    '--- Step 1 ---
     wsReport.Columns("A:A").TextToColumns Destination:=wsReport.Range("A1"), _
                                       DataType:=xlDelimited, TextQualifier:=xlDoubleQuote, _
                                       ConsecutiveDelimiter:=False, Tab:=False, Semicolon:=False, _
@@ -36,7 +35,10 @@ Sub ProcessReport_Steps_1_to_6()
     End If
     Set wsReport = reportWB.Worksheets("GBCLM_REPORT")
 
-    '--- Step 2 ---
+    '==================================================================================
+    '===[ STEP 2: CREATE SHEET AND COPY HEADERS ONLY ]=================================
+    '==================================================================================
+    
     Application.DisplayAlerts = False
     On Error Resume Next
     reportWB.Worksheets("FEN Records").Delete
@@ -47,7 +49,10 @@ Sub ProcessReport_Steps_1_to_6()
     wsReport.Range("A21:E21").Copy Destination:=wsFEN.Range("A1")
     wsFEN.Cells.EntireColumn.AutoFit
 
-    '--- Step 3 ---
+    '==================================================================================
+    '===[ STEP 3: FILTER, COPY, AND PASTE "FEN-" DATA ]================================
+    '==================================================================================
+    
     Dim lastRow As Long, filterRange As Range, dataToCopy As Range
     lastRow = wsReport.Cells(wsReport.Rows.Count, "A").End(xlUp).Row
     If lastRow > 21 Then
@@ -57,19 +62,38 @@ Sub ProcessReport_Steps_1_to_6()
         On Error Resume Next
         Set dataToCopy = filterRange.Offset(1, 0).SpecialCells(xlCellTypeVisible)
         On Error GoTo 0
-        If Not dataToCopy Is Nothing Then dataToCopy.Copy wsFEN.Range("A2"): wsFEN.Cells.EntireColumn.AutoFit
+        If Not dataToCopy Is Nothing Then
+            dataToCopy.Copy wsFEN.Range("A2")
+            wsFEN.Cells.EntireColumn.AutoFit
+        End If
         wsReport.AutoFilterMode = False
     End If
 
-    '--- Step 4 ---
+    '==================================================================================
+    '===[ STEP 4: ADD STATIC LABELS TO GBCLM_REPORT (FULL VERSION) ]===================
+    '==================================================================================
+    
     wsReport.Range("C2").Value = "Total Number of Individual Customers in Fenergo Database"
     wsReport.Range("C3").Value = "Total No. of Customers Excluded from Screening from Fenergo Database"
     wsReport.Range("C4").Value = "1 CIS with only existing inflight NCTO/RRA Reason. No valid review"
-    ' ... (shortened for brevity, full code includes all your labels)
+    wsReport.Range("C5").Value = "02 CIS with only existing Cancelled. Reason: No valid review"
+    wsReport.Range("C6").Value = "3. Unassigned / No review exist(s)"
+    wsReport.Range("C7").Value = "4. Technical Issue(s) occurred in Fenergo Database"
+    wsReport.Range("C8").Value = "Total No. of Customers Sent to Screening from Fenergo Database"
+    wsReport.Range("C9").Value = "Difference Between Total and Combination of Excluded & Included"
+    wsReport.Range("C11").Value = "No. of Customers Excluded from Screening from Fenergo Database (In Today's report)"
+    wsReport.Range("C12").Value = "No. of Customers Excluded from Screening from Fenergo Database (In Previous day report)"
+    wsReport.Range("C13").Value = "Change in no. of Customers Excluded from Screening"
+    wsReport.Range("C14").Value = "Change in no of Customers Excluded from Screening (In Percentage)"
+    wsReport.Range("C16").Value = "Total Number of Individual Customers in Fenergo Database (In Today's report)"
+    wsReport.Range("C17").Value = "Total Number of Individual Customers in Fenergo Database (In Previous day report)"
     wsReport.Range("C18").Value = "Net Change in Total Number of Individual Customers"
     wsReport.Columns("C:C").AutoFit
     
-    '--- Step 5 ---
+    '==================================================================================
+    '===[ STEP 5: CREATE "UNIQUE CIS" SHEET ]==========================================
+    '==================================================================================
+    
     If lastRow > 21 Then
         Dim sourceRange As Range, uniqueLastRow As Long
         Application.DisplayAlerts = False: On Error Resume Next
@@ -95,9 +119,8 @@ Sub ProcessReport_Steps_1_to_6()
     End If
     
     '==================================================================================
-    '===[ STEP 6: CREATE PIVOT TABLE ("Analysis" Sheet) ]==============================
+    '===[ STEP 6: CREATE PIVOT TABLE ("Analysis" Sheet) - CORRECTED LOGIC ]============
     '==================================================================================
-    ' This code translates your recorded macro into a dynamic and clean version.
     
     Dim wsPivot As Worksheet
     Dim pvtCache As PivotCache
@@ -111,41 +134,37 @@ Sub ProcessReport_Steps_1_to_6()
     On Error GoTo 0
     Application.DisplayAlerts = True
     
-    ' Add the sheet after the last one we created
     Set wsPivot = reportWB.Worksheets.Add(After:=reportWB.Sheets(reportWB.Sheets.Count))
     wsPivot.Name = "Analysis"
     
-    ' Action 6.2: Define the dynamic source data range from the GBCLM_REPORT sheet
-    ' This uses the 'lastRow' variable we already found in Step 3
+    ' Action 6.2: Define the dynamic source data range from GBCLM_REPORT
     Set pvtSourceRange = wsReport.Range("A21:E" & lastRow)
     
     ' Action 6.3: Create the Pivot Cache and the Pivot Table
     Set pvtCache = reportWB.PivotCaches.Create(SourceType:=xlDatabase, SourceData:=pvtSourceRange, Version:=8)
     Set pvtTable = pvtCache.CreatePivotTable(TableDestination:=wsPivot.Range("A3"), TableName:="AnalysisPivot", DefaultVersion:=8)
     
-    ' Action 6.4: Configure the Pivot Table fields and layout
-    ' Using a "With" block makes the code cleaner
+    ' Action 6.4: Configure the Pivot Table fields exactly as recorded
     With pvtTable
-        ' Add fields to the ROWS area
-        ' IMPORTANT: The field names must EXACTLY match your headers, including any extra spaces.
+        ' First, add all the initial row fields as per your macro
         .PivotFields(" CIS CODE ").Orientation = xlRowField
         .PivotFields(" REVIEW STATUS ").Orientation = xlRowField
+        .PivotFields(" SENT ? (Yes/No)").Orientation = xlRowField
         .PivotFields(" REASON").Orientation = xlRowField
         
-        ' Add field to the COLUMNS area
-        .PivotFields(" SENT ? (Yes/No)").Orientation = xlColumnField
-        
-        ' Add field to the VALUES area
+        ' Second, add the data field
         .AddDataField .PivotFields(" CIS CODE "), "Count of  CIS CODE ", xlCount
         
-        ' Apply key layout settings from your recorded macro
+        ' Third, move the "SENT ?" field to be a column field
+        .PivotFields(" SENT ? (Yes/No)").Orientation = xlColumnField
+        
+        ' Finally, apply key layout settings
         .RepeatAllLabels xlRepeatLabels
         .RowAxisLayout xlCompactRow
     End With
     
     ' Action 6.5: Activate the sheet for the user to see
     wsPivot.Activate
-    
 
     '==================================================================================
     '===[ FINISH ]=====================================================================
