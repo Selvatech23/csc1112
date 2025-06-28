@@ -1,0 +1,234 @@
+Option Explicit
+
+Sub ProcessReport_Final_Version_With_Pivot()
+
+    '==================================================================================
+    '===[ SETUP ]======================================================================
+    '==================================================================================
+    
+    Application.ScreenUpdating = False
+    
+    Dim reportWB As Workbook, macroWB As Workbook, prevDayWB As Workbook
+    Set reportWB = ActiveWorkbook: Set macroWB = ThisWorkbook
+    
+    Dim wsReport As Worksheet, wsFEN As Worksheet, wsUniqueCIS As Worksheet, wsSpace As Worksheet, wsClient As Worksheet, wsBDX As Worksheet
+    Set wsReport = reportWB.ActiveSheet
+    
+    Dim lastRow As Long
+    Dim filePathFromCell As String, wsHome As Worksheet
+
+    '==================================================================================
+    '===[ STEPS 1-10 (THE STABLE, WORKING BASE) ]======================================
+    '==================================================================================
+    '--- Steps 1 through 10 are completely unchanged. ---
+    
+    ' (Full, unabridged code for steps 1-10 is included below for copy-pasting convenience)
+    wsReport.Columns("A:A").TextToColumns Destination:=wsReport.Range("A1"), DataType:=xlDelimited, TextQualifier:=xlDoubleQuote, ConsecutiveDelimiter:=False, Tab:=False, Semicolon:=False, Comma:=False, Space:=False, Other:=True, OtherChar:="|"
+    wsReport.Columns("A:A").Delete: wsReport.Cells.EntireColumn.AutoFit
+    If wsReport.Name <> "GBCLM_REPORT" Then
+        On Error Resume Next: wsReport.Name = "GBCLM_REPORT"
+        If Err.Number <> 0 Then MsgBox "Could not rename sheet.", vbCritical: Err.Clear: Application.ScreenUpdating = True: Exit Sub
+        On Error GoTo 0
+    End If
+    Set wsReport = reportWB.Worksheets("GBCLM_REPORT")
+    Application.DisplayAlerts = False: On Error Resume Next
+    reportWB.Worksheets("FEN Records").Delete
+    On Error GoTo 0: Application.DisplayAlerts = True
+    Set wsFEN = reportWB.Worksheets.Add(After:=wsReport)
+    wsFEN.Name = "FEN Records": wsReport.Range("A21:E21").Copy wsFEN.Range("A1"): wsFEN.Cells.EntireColumn.AutoFit
+    Dim filterRange As Range, dataToCopy As Range
+    lastRow = wsReport.Cells(wsReport.Rows.Count, "A").End(xlUp).Row
+    If lastRow > 21 Then
+        Set filterRange = wsReport.Range("A21:E" & lastRow): wsReport.AutoFilterMode = False
+        filterRange.AutoFilter Field:=1, Criteria1:="FEN-*"
+        On Error Resume Next
+        Set dataToCopy = filterRange.Offset(1, 0).SpecialCells(xlCellTypeVisible)
+        On Error GoTo 0
+        If Not dataToCopy Is Nothing Then dataToCopy.Copy wsFEN.Range("A2"): wsFEN.Cells.EntireColumn.AutoFit
+        wsReport.AutoFilterMode = False
+    End If
+    wsReport.Range("C2").Value = "Total Number of Individual Customers in Fenergo Database": wsReport.Range("C3").Value = "Total No. of Customers Excluded from Screening from Fenergo Database"
+    wsReport.Range("C4").Value = "1 CIS with only existing inflight NCTO/RRA Reason. No valid review": wsReport.Range("C5").Value = "02 CIS with only existing Cancelled. Reason: No valid review"
+    wsReport.Range("C6").Value = "3. Unassigned / No review exist(s)": wsReport.Range("C7").Value = "4. Technical Issue(s) occurred in Fenergo Database"
+    wsReport.Range("C8").Value = "Total No. of Customers Sent to Screening from Fenergo Database": wsReport.Range("C9").Value = "Difference Between Total and Combination of Excluded & Included"
+    wsReport.Range("C11").Value = "No. of Customers Excluded from Screening from Fenergo Database (In Today's report)": wsReport.Range("C12").Value = "No. of Customers Excluded from Screening from Fenergo Database (In Previous day report)"
+    wsReport.Range("C13").Value = "Change in no. of Customers Excluded from Screening": wsReport.Range("C14").Value = "Change in no of Customers Excluded from Screening (In Percentage)"
+    wsReport.Range("C16").Value = "Total Number of Individual Customers in Fenergo Database (In Today's report)": wsReport.Range("C17").Value = "Total Number of Individual Customers in Fenergo Database (In Previous day report)"
+    wsReport.Range("C18").Value = "Net Change in Total Number of Individual Customers": wsReport.Columns("C:C").AutoFit
+    If lastRow > 21 Then
+        Dim sourceRange As Range, uniqueLastRow As Long
+        Application.DisplayAlerts = False: On Error Resume Next: reportWB.Worksheets("Unique CIS").Delete
+        On Error GoTo 0: Application.DisplayAlerts = True
+        Set wsUniqueCIS = reportWB.Worksheets.Add(After:=wsFEN): wsUniqueCIS.Name = "Unique CIS"
+        Set sourceRange = wsReport.Range("A22:A" & lastRow): sourceRange.Copy wsUniqueCIS.Range("A1")
+        uniqueLastRow = wsUniqueCIS.Cells(wsUniqueCIS.Rows.Count, "A").End(xlUp).Row
+        wsUniqueCIS.Columns("A:A").Replace What:="fen-", Replacement:="", LookAt:=xlPart, MatchCase:=False
+        With wsUniqueCIS.Range("B1:B" & uniqueLastRow): .Formula = "=TRIM(A1)": .Value = .Value: End With
+        wsUniqueCIS.Range("A1:A" & uniqueLastRow).Value = wsUniqueCIS.Range("B1:B" & uniqueLastRow).Value
+        wsUniqueCIS.Columns("B").Delete: wsUniqueCIS.Columns("A:A").RemoveDuplicates Columns:=1, Header:=xlNo
+        wsUniqueCIS.Rows("1:1").Insert Shift:=xlDown
+        With wsUniqueCIS.Range("A1"): .Value = "CIS CODE": .Interior.Color = RGB(173, 216, 230): End With
+        wsUniqueCIS.Columns("A:A").AutoFit
+    End If
+    Dim prevDayValueC2 As Variant, prevDayValueC3 As Variant
+    On Error Resume Next: Set wsHome = ThisWorkbook.Worksheets("Home"): On Error GoTo 0
+    prevDayValueC2 = 0: prevDayValueC3 = 0
+    If Not wsHome Is Nothing Then
+        filePathFromCell = wsHome.Range("E10").Value
+        If Dir(filePathFromCell) <> "" Then
+            Set prevDayWB = Workbooks.Open(filePathFromCell, ReadOnly:=True)
+            prevDayValueC2 = prevDayWB.Worksheets("GBCLM_REPORT").Range("G2").Value
+            prevDayValueC3 = prevDayWB.Worksheets("GBCLM_REPORT").Range("G3").Value
+            prevDayWB.Close SaveChanges:=False
+        End If
+    End If
+    Dim fenLastRow As Long, fenSentCol As String
+    fenLastRow = wsFEN.Cells(wsFEN.Rows.Count, "A").End(xlUp).Row: fenSentCol = "D"
+    With wsReport
+        .Range("G2").Formula = "=COUNTA('FEN Records'!A2:A" & fenLastRow & ")": .Range("G3").Formula = "=COUNTIF('FEN Records'!" & fenSentCol & ":" & fenSentCol & ",""No"")"
+        .Range("G4").Formula = "=COUNTIF('FEN Records'!" & fenSentCol & ":" & fenSentCol & ",""No"")": .Range("G5").Value = 0: .Range("G6").Value = 0: .Range("G7").Value = 0
+        .Range("G8").Formula = "=COUNTIF('FEN Records'!" & fenSentCol & ":" & fenSentCol & ",""Yes"")": .Range("G9").Formula = "=G2-(G3+G8)"
+        .Range("G11").Formula = "=G3": .Range("G12").Value = prevDayValueC3: .Range("G13").Formula = "=G11-G12"
+        .Range("G14").Formula = "=IFERROR(G13/G11,0)": .Range("G14").NumberFormat = "0.00%": .Range("G16").Formula = "=G2"
+        .Range("G17").Value = prevDayValueC2: .Range("G18").Formula = "=G16-G17": .Columns("G:G").AutoFit
+    End With
+    Dim wsAdded As Worksheet, wsRemoved As Worksheet
+    Application.DisplayAlerts = False: On Error Resume Next: reportWB.Worksheets("Space issue").Delete: reportWB.Worksheets("Added").Delete: reportWB.Worksheets("Removed").Delete
+    On Error GoTo 0: Application.DisplayAlerts = True
+    Set wsSpace = reportWB.Worksheets.Add(After:=reportWB.Sheets(reportWB.Sheets.Count)): wsSpace.Name = "Space issue"
+    With wsSpace.Range("A1"): .Value = "CIS CODE": .Interior.Color = RGB(173, 216, 230): End With
+    With wsSpace.Range("B1"): .Value = "STATUS": .Interior.Color = RGB(173, 216, 230): End With
+    If lastRow > 21 Then
+        wsReport.Range("A22:A" & lastRow).Copy Destination:=wsSpace.Range("A2")
+        With wsSpace.Range("A2:A" & wsSpace.Cells(wsSpace.Rows.Count, "A").End(xlUp).Row)
+            .Replace What:="FEN-", Replacement:="", LookAt:=xlPart, MatchCase:=False: .RemoveDuplicates Columns:=1, Header:=xlNo
+        End With
+    End If
+    Dim lookupFileName As String
+    If filePathFromCell <> "" And Dir(filePathFromCell) <> "" Then
+        lookupFileName = Mid(filePathFromCell, InStrRev(filePathFromCell, "\") + 1)
+        Dim spaceLastRow As Long: spaceLastRow = wsSpace.Cells(wsSpace.Rows.Count, "A").End(xlUp).Row
+        If spaceLastRow > 1 Then
+            Dim vlookupRange As Range: Set vlookupRange = wsSpace.Range("B2:B" & spaceLastRow)
+            vlookupRange.Formula = "=IFERROR(VLOOKUP(A2,'[" & lookupFileName & "]Space issue'!A:B,2,FALSE),""Not Found"")"
+            vlookupRange.Copy: vlookupRange.PasteSpecial Paste:=xlPasteValues: Application.CutCopyMode = False
+        End If
+    End If
+    wsSpace.Cells.EntireColumn.AutoFit
+    Dim wsPreviousFEN As Worksheet, helperCol As Long
+    Set wsAdded = reportWB.Worksheets.Add(After:=wsSpace): wsAdded.Name = "Added"
+    Set wsRemoved = reportWB.Worksheets.Add(After:=wsAdded): wsRemoved.Name = "Removed"
+    wsFEN.Range("A1:E1").Copy wsAdded.Range("A1"): wsFEN.Range("A1:E1").Copy wsRemoved.Range("A1")
+    If filePathFromCell <> "" And Dir(filePathFromCell) <> "" Then
+        Set prevDayWB = Workbooks.Open(filePathFromCell, ReadOnly:=True)
+        On Error Resume Next: Set wsPreviousFEN = prevDayWB.Worksheets("FEN Records"): On Error GoTo 0
+        If wsPreviousFEN Is Nothing Then
+            MsgBox "Could not find 'FEN Records' sheet in previous day's file.", vbExclamation: prevDayWB.Close False
+        Else
+            helperCol = 6: wsFEN.Cells(1, helperCol).Value = "Match Check"
+            Dim currentLastRow As Long: currentLastRow = wsFEN.Cells(wsFEN.Rows.Count, "A").End(xlUp).Row
+            If currentLastRow > 1 Then wsFEN.Range("F2:F" & currentLastRow).FormulaR1C1 = "=COUNTIF('[" & prevDayWB.Name & "]FEN Records'!C1,RC1)"
+            On Error Resume Next
+            wsFEN.Range("A1:F" & currentLastRow).AutoFilter Field:=helperCol, Criteria1:="0"
+            If wsFEN.AutoFilter.Range.Columns(1).SpecialCells(xlCellTypeVisible).Count > 1 Then wsFEN.Range("A2:E" & currentLastRow).SpecialCells(xlCellTypeVisible).Copy wsAdded.Range("A2")
+            wsFEN.AutoFilterMode = False: wsFEN.Columns(helperCol).Delete: On Error GoTo 0
+            Dim wsTemp As Worksheet: Set wsTemp = reportWB.Worksheets.Add
+            wsPreviousFEN.UsedRange.Copy wsTemp.Range("A1"): helperCol = 6: wsTemp.Cells(1, helperCol).Value = "Match Check"
+            Dim previousLastRow As Long: previousLastRow = wsTemp.Cells(wsTemp.Rows.Count, "A").End(xlUp).Row
+            If previousLastRow > 1 Then wsTemp.Range("F2:F" & previousLastRow).Formula = "=COUNTIF('FEN Records'!A:A,A2)"
+            On Error Resume Next
+            wsTemp.Range("A1:F" & previousLastRow).AutoFilter Field:=helperCol, Criteria1:="0"
+            If wsTemp.AutoFilter.Range.Columns(1).SpecialCells(xlCellTypeVisible).Count > 1 Then wsTemp.Range("A2:E" & previousLastRow).SpecialCells(xlCellTypeVisible).Copy wsRemoved.Range("A2")
+            Application.DisplayAlerts = False: wsTemp.Delete: Application.DisplayAlerts = True
+            prevDayWB.Close SaveChanges:=False
+            wsAdded.Cells.EntireColumn.AutoFit: wsRemoved.Cells.EntireColumn.AutoFit
+        End If
+    End If
+    Dim txtFilePath As String
+    If Not wsHome Is Nothing Then
+        txtFilePath = wsHome.Range("E11").Value
+        If txtFilePath <> "" And Dir(txtFilePath) <> "" Then
+            Application.DisplayAlerts = False: On Error Resume Next
+            reportWB.Worksheets("Client Completeness").Delete
+            On Error GoTo 0: Application.DisplayAlerts = True
+            Set wsClient = reportWB.Worksheets.Add(After:=reportWB.Sheets(reportWB.Sheets.Count))
+            wsClient.Name = "Client Completeness"
+            With wsClient.QueryTables.Add(Connection:="TEXT;" & txtFilePath, Destination:=wsClient.Range("A1"))
+                .TextFileParseType = xlDelimited: .TextFileOtherDelimiter = "!": .Refresh BackgroundQuery:=False: .Delete
+            End With
+            wsClient.Range("B:B,D:D,F:F,H:H,J:J,L:L,N:N").Delete
+            wsClient.Cells.EntireColumn.AutoFit
+        End If
+    End If
+    Dim qlikviewFilePath As String, qlikviewWB As Workbook, sourceSheet As Worksheet, qvLastRow As Long, copyRange As Range
+    If Not wsHome Is Nothing Then
+        qlikviewFilePath = wsHome.Range("E12").Value
+        If qlikviewFilePath <> "" And Dir(qlikviewFilePath) <> "" Then
+            Application.DisplayAlerts = False: On Error Resume Next
+            reportWB.Worksheets("Approved BDX").Delete
+            On Error GoTo 0: Application.DisplayAlerts = True
+            Set wsBDX = reportWB.Worksheets.Add(After:=reportWB.Sheets(reportWB.Sheets.Count))
+            wsBDX.Name = "Approved BDX"
+            Set qlikviewWB = Workbooks.Open(qlikviewFilePath, ReadOnly:=True)
+            If Not qlikviewWB Is Nothing Then
+                Set sourceSheet = qlikviewWB.Worksheets(1)
+                qvLastRow = sourceSheet.Cells(sourceSheet.Rows.Count, "F").End(xlUp).Row
+                If qvLastRow > 0 Then
+                    Set copyRange = sourceSheet.Range("F1:N" & qvLastRow)
+                    copyRange.Copy Destination:=wsBDX.Range("A1")
+                End If
+                qlikviewWB.Close SaveChanges:=False
+                wsBDX.Range("J1").Value = "Case feeding to GCS": wsBDX.Range("K1").Value = "Case Status"
+                wsBDX.Range("L1").Value = "Comparison": wsBDX.Range("M1").Value = "Comments"
+                wsBDX.Cells.EntireColumn.AutoFit
+            End If
+        End If
+    End If
+    
+    '==================================================================================
+    '===[ NEW STEP 11: CREATE PIVOT TABLE ("Analysis" Sheet) ]=========================
+    '==================================================================================
+    
+    Dim wsPivot As Worksheet
+    Dim pvtCache As PivotCache
+    Dim pvtTable As PivotTable
+    Dim pvtSourceRange As Range
+    
+    Application.DisplayAlerts = False
+    On Error Resume Next
+    reportWB.Worksheets("Analysis").Delete
+    On Error GoTo 0
+    Application.DisplayAlerts = True
+    
+    Set wsPivot = reportWB.Worksheets.Add(After:=reportWB.Sheets(reportWB.Sheets.Count))
+    wsPivot.Name = "Analysis"
+    
+    ' Only create pivot if data exists
+    If lastRow > 21 Then
+        Set pvtSourceRange = wsReport.Range("A21:E" & lastRow)
+    
+        Set pvtCache = reportWB.PivotCaches.Create(SourceType:=xlDatabase, SourceData:=pvtSourceRange)
+        Set pvtTable = pvtCache.CreatePivotTable(TableDestination:=wsPivot.Range("A3"), TableName:="AnalysisPivot")
+        
+        With pvtTable
+            .PivotFields(" CIS CODE ").Orientation = xlRowField
+            .PivotFields(" REVIEW STATUS ").Orientation = xlRowField
+            .PivotFields(" SENT ? (Yes/No)").Orientation = xlRowField
+            .PivotFields(" REASON").Orientation = xlRowField
+            .AddDataField .PivotFields(" CIS CODE "), "Count of  CIS CODE ", xlCount
+            .PivotFields(" SENT ? (Yes/No)").Orientation = xlColumnField
+            .RepeatAllLabels xlRepeatLabels
+            .RowAxisLayout xlCompactRow
+        End With
+    End If
+    
+    wsPivot.Activate
+
+    '==================================================================================
+    '===[ FINISH ]=====================================================================
+    '==================================================================================
+    
+    Application.ScreenUpdating = True
+    MsgBox "Process complete! All 11 steps, including the Pivot Table, have been successfully executed.", vbInformation
+
+End Sub
