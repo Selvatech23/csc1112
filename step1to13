@@ -1,6 +1,6 @@
 Option Explicit
 
-Sub ProcessReport_Steps_1_to_13_FlexibleLabels()
+Sub ProcessReport_Steps_1_to_13_WithFormatting()
 
     '==================================================================================
     '===[ SETUP ]======================================================================
@@ -46,8 +46,6 @@ Sub ProcessReport_Steps_1_to_13_FlexibleLabels()
         wsReport.AutoFilterMode = False
     End If
     
-    '--- The block of hardcoded labels has been moved into the logic below ---
-
     If lastRow > 21 Then
         Dim sourceRange As Range, uniqueLastRow As Long
         Application.DisplayAlerts = False: On Error Resume Next: reportWB.Worksheets("Unique CIS").Delete
@@ -64,7 +62,6 @@ Sub ProcessReport_Steps_1_to_13_FlexibleLabels()
         wsUniqueCIS.Columns("A:A").AutoFit
     End If
     
-    '--- Prepare sheets for later steps before opening external files
     Application.DisplayAlerts = False: On Error Resume Next
     reportWB.Worksheets("Space issue").Delete: reportWB.Worksheets("Added").Delete: reportWB.Worksheets("Removed").Delete
     On Error GoTo 0: Application.DisplayAlerts = True
@@ -82,7 +79,7 @@ Sub ProcessReport_Steps_1_to_13_FlexibleLabels()
     Set wsRemoved = reportWB.Worksheets.Add(After:=wsAdded): wsRemoved.Name = "Removed"
     
     '==================================================================================
-    '===[ STEP 8: PREVIOUS DAY COMPARISONS (NOW WITH DYNAMIC LABELS) ]=================
+    '===[ STEP 8: PREVIOUS DAY COMPARISONS (WITH DYNAMIC FORMATTING) ]=================
     '==================================================================================
     Dim prevDayValueC2 As Variant, prevDayValueC3 As Variant
     On Error Resume Next: Set wsHome = ThisWorkbook.Worksheets("Home"): On Error GoTo 0
@@ -90,23 +87,25 @@ Sub ProcessReport_Steps_1_to_13_FlexibleLabels()
     
     If Not wsHome Is Nothing Then
         filePathFromCell = wsHome.Range("E10").Value
-        '--- Check if previous day's file exists ---
         If Dir(filePathFromCell) <> "" Then
-            ' --- FILE EXISTS: Use it for dynamic labels and comparisons ---
-            
-            ' 1. OPEN the previous day's workbook
             Set prevDayWB = Workbooks.Open(filePathFromCell, ReadOnly:=True)
             
-            ' 2. DO ALL the tasks that depend on this workbook
+            '--- NEW: Task A: Copy dashboard labels AND formatting
+            ' Copy values and formats for column C, then "drag" the format across to F
+            prevDayWB.Worksheets("GBCLM_REPORT").Range("C2:C18").Copy
+            wsReport.Range("C2:C18").PasteSpecial Paste:=xlPasteAll
+            wsReport.Range("D2:F18").PasteSpecial Paste:=xlPasteFormats
             
-            ' Task A: Copy dashboard labels from previous report for consistency
-            prevDayWB.Worksheets("GBCLM_REPORT").Range("C2:C18").Copy Destination:=wsReport.Range("C2:C18")
+            '--- NEW: Task B: Copy formatting for the results column G
+            prevDayWB.Worksheets("GBCLM_REPORT").Range("G2:G18").Copy
+            wsReport.Range("G2:G18").PasteSpecial Paste:=xlPasteFormats
+            Application.CutCopyMode = False 'Clear clipboard
             
-            ' Task B: Get the summary values for the dashboard
+            '--- Task C: Get the summary values for the dashboard
             prevDayValueC2 = prevDayWB.Worksheets("GBCLM_REPORT").Range("G2").Value
             prevDayValueC3 = prevDayWB.Worksheets("GBCLM_REPORT").Range("G3").Value
             
-            ' Task C: Perform VLOOKUP for "Space issue" sheet
+            '--- Task D: Perform VLOOKUP for "Space issue" sheet
             Dim spaceLastRow As Long, vlookupRange As Range
             spaceLastRow = wsSpace.Cells(wsSpace.Rows.Count, "A").End(xlUp).Row
             If spaceLastRow > 1 Then
@@ -116,7 +115,7 @@ Sub ProcessReport_Steps_1_to_13_FlexibleLabels()
             End If
             wsSpace.Cells.EntireColumn.AutoFit
             
-            ' Task D: Perform "Added" / "Removed" reconciliation
+            '--- Task E: Perform "Added" / "Removed" reconciliation
             wsFEN.Range("A1:E1").Copy wsAdded.Range("A1"): wsFEN.Range("A1:E1").Copy wsRemoved.Range("A1")
             Dim wsPreviousFEN As Worksheet, helperCol As Long
             On Error Resume Next: Set wsPreviousFEN = prevDayWB.Worksheets("FEN Records"): On Error GoTo 0
@@ -147,10 +146,8 @@ Sub ProcessReport_Steps_1_to_13_FlexibleLabels()
                 wsAdded.Cells.EntireColumn.AutoFit: wsRemoved.Cells.EntireColumn.AutoFit
             End If
             
-            ' 3. CLOSE the workbook now that all dependencies are resolved.
             prevDayWB.Close SaveChanges:=False
         Else
-            ' --- FALLBACK: If file doesn't exist, use hardcoded labels ---
             wsReport.Range("C2").Value = "Total Number of Individual Customers in Fenergo Database": wsReport.Range("C3").Value = "Total No. of Customers Excluded from Screening from Fenergo Database"
             wsReport.Range("C4").Value = "1 CIS with only existing inflight NCTO/RRA Reason. No valid review": wsReport.Range("C5").Value = "02 CIS with only existing Cancelled. Reason: No valid review"
             wsReport.Range("C6").Value = "3. Unassigned / No review exist(s)": wsReport.Range("C7").Value = "4. Technical Issue(s) occurred in Fenergo Database"
@@ -159,14 +156,13 @@ Sub ProcessReport_Steps_1_to_13_FlexibleLabels()
             wsReport.Range("C13").Value = "Change in no. of Customers Excluded from Screening": wsReport.Range("C14").Value = "Change in no of Customers Excluded from Screening (In Percentage)"
             wsReport.Range("C16").Value = "Total Number of Individual Customers in Fenergo Database (In Today's report)": wsReport.Range("C17").Value = "Total Number of Individual Customers in Fenergo Database (In Previous day report)"
             wsReport.Range("C18").Value = "Net Change in Total Number of Individual Customers"
-            ' Previous day values will remain 0 as initialized
         End If
     End If
     
     '==================================================================================
     '===[ STEP 9: POPULATE DASHBOARD & CLIENT COMPLETENESS ]===========================
     '==================================================================================
-    wsReport.Columns("C:C").AutoFit 'Autofit column C after labels are populated
+    wsReport.Columns("C:G").AutoFit 'Autofit columns C through G
     
     Dim fenLastRow As Long, fenSentCol As String
     fenLastRow = wsFEN.Cells(wsFEN.Rows.Count, "A").End(xlUp).Row: fenSentCol = "D"
@@ -176,7 +172,7 @@ Sub ProcessReport_Steps_1_to_13_FlexibleLabels()
         .Range("G8").Formula = "=COUNTIF('FEN Records'!" & fenSentCol & ":" & fenSentCol & ",""Yes"")": .Range("G9").Formula = "=G2-(G3+G8)"
         .Range("G11").Formula = "=G3": .Range("G12").Value = prevDayValueC3: .Range("G13").Formula = "=G11-G12"
         .Range("G14").Formula = "=IFERROR(G13/G11,0)": .Range("G14").NumberFormat = "0.00%": .Range("G16").Formula = "=G2"
-        .Range("G17").Value = prevDayValueC2: .Range("G18").Formula = "=G16-G17": .Columns("G:G").AutoFit
+        .Range("G17").Value = prevDayValueC2: .Range("G18").Formula = "=G16-G17"
     End With
     
     Dim wsClient As Worksheet, txtFilePath As String
@@ -226,7 +222,6 @@ Sub ProcessReport_Steps_1_to_13_FlexibleLabels()
             wsBDX.Range("L1").Value = "Comparison": wsBDX.Range("M1").Value = "Comments"
             wsBDX.Cells.EntireColumn.AutoFit
             
-            '--- Step 11: BDX Lookups
             Dim wsTempLookup As Worksheet, bdxLastRow As Long
             Application.DisplayAlerts = False: On Error Resume Next: reportWB.Worksheets("TempBDXLookup").Delete
             On Error GoTo 0: Application.DisplayAlerts = True
@@ -248,7 +243,6 @@ Sub ProcessReport_Steps_1_to_13_FlexibleLabels()
                 wsBDX.Range("L2:L" & bdxLastRow).Formula = "=IF(J2=""Not Found"", ""Not Found"", F2=J2)"
                 wsBDX.Range("J2:L" & bdxLastRow).Value = wsBDX.Range("J2:L" & bdxLastRow).Value
                 
-                '--- Step 12: BDX Comments
                 wsBDX.Range("M2:M" & bdxLastRow).Formula = "=IF(AND(K2=""Approved"",L2=TRUE),""Latest case feed"","""")"
                 wsBDX.Range("M2:M" & bdxLastRow).Value = wsBDX.Range("M2:M" & bdxLastRow).Value
             End If
@@ -256,7 +250,6 @@ Sub ProcessReport_Steps_1_to_13_FlexibleLabels()
             Application.DisplayAlerts = False: wsTempLookup.Delete: Application.DisplayAlerts = True
             wsBDX.Cells.EntireColumn.AutoFit
             
-            '--- Step 13: Create Offboard Analysis Sheet
             Dim wsOffboard As Worksheet
             Application.DisplayAlerts = False: On Error Resume Next
             reportWB.Worksheets("Offboard Analysis").Delete
