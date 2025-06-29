@@ -1,6 +1,6 @@
 Option Explicit
 
-Sub ProcessReport_Live()
+Sub ProcessReport_Live_Final()
 
     '==================================================================================
     '===[ SETUP (ENHANCED & USER-FRIENDLY) ]===========================================
@@ -24,7 +24,6 @@ Sub ProcessReport_Live()
     reportFilePath = wsHome.Range("E9").Value
     
     If reportFilePath <> "" And Dir(reportFilePath) <> "" Then
-        ' --- THE FIX IS HERE: Added UpdateLinks:=3 to auto-update links ---
         Set reportWB = Workbooks.Open(Filename:=reportFilePath, UpdateLinks:=3)
     Else
         Set reportWB = ActiveWorkbook
@@ -51,7 +50,7 @@ Sub ProcessReport_Live()
     Dim filePathFromCell As String
 
     '==================================================================================
-    '===[ STEPS 1-7 (UNCHANGED PREP WORK) ]============================================
+    '===[ STEPS 1-5 (INITIAL DATA PREPARATION) ]=======================================
     '==================================================================================
     
     wsReport.Columns("A:A").TextToColumns Destination:=wsReport.Range("A1"), DataType:=xlDelimited, TextQualifier:=xlDoubleQuote, ConsecutiveDelimiter:=False, Tab:=False, Semicolon:=False, Comma:=False, Space:=False, Other:=True, OtherChar:="|"
@@ -94,6 +93,47 @@ Sub ProcessReport_Live()
         With wsUniqueCIS.Range("A1"): .Value = "CIS CODE": .Interior.Color = RGB(173, 216, 230): End With
         wsUniqueCIS.Columns("A:A").AutoFit
     End If
+
+    '==================================================================================
+    '===[ STEP 6: CREATE PIVOT TABLE ("Analysis" Sheet) - CORRECTED LOGIC ]============
+    '==================================================================================
+    
+    Dim wsPivot As Worksheet
+    Dim pvtCache As PivotCache
+    Dim pvtTable As PivotTable
+    Dim pvtSourceRange As Range
+    
+    Application.DisplayAlerts = False: On Error Resume Next
+    reportWB.Worksheets("Analysis").Delete
+    On Error GoTo 0: Application.DisplayAlerts = True
+    
+    Set wsPivot = reportWB.Worksheets.Add(After:=reportWB.Sheets(reportWB.Sheets.Count))
+    wsPivot.Name = "Analysis"
+    
+    If lastRow > 21 Then
+        Set pvtSourceRange = wsReport.Range("A21:E" & lastRow)
+        
+        Set pvtCache = reportWB.PivotCaches.Create(SourceType:=xlDatabase, SourceData:=pvtSourceRange, Version:=8)
+        Set pvtTable = pvtCache.CreatePivotTable(TableDestination:=wsPivot.Range("A3"), TableName:="AnalysisPivot", DefaultVersion:=8)
+        
+        With pvtTable
+            .PivotFields(" CIS CODE ").Orientation = xlRowField
+            .PivotFields(" REVIEW STATUS ").Orientation = xlRowField
+            .PivotFields(" SENT ? (Yes/No)").Orientation = xlRowField
+            .PivotFields(" REASON").Orientation = xlRowField
+            
+            .AddDataField .PivotFields(" CIS CODE "), "Count of  CIS CODE ", xlCount
+            
+            .PivotFields(" SENT ? (Yes/No)").Orientation = xlColumnField
+            
+            .RepeatAllLabels xlRepeatLabels
+            .RowAxisLayout xlCompactRow
+        End With
+    End If
+    
+    '==================================================================================
+    '===[ STEP 7: PREPARE SHEETS FOR COMPARISON ]======================================
+    '==================================================================================
     
     Application.DisplayAlerts = False: On Error Resume Next
     reportWB.Worksheets("Space issue").Delete: reportWB.Worksheets("Added").Delete: reportWB.Worksheets("Removed").Delete
@@ -119,7 +159,6 @@ Sub ProcessReport_Live()
     
     filePathFromCell = wsHome.Range("E10").Value
     If Dir(filePathFromCell) <> "" Then
-        ' --- THE FIX IS HERE: Added UpdateLinks:=0 to prevent prompts for source files ---
         Set prevDayWB = Workbooks.Open(Filename:=filePathFromCell, UpdateLinks:=0, ReadOnly:=True)
         
         prevDayWB.Worksheets("GBCLM_REPORT").Range("C2:C18").Copy
@@ -231,7 +270,6 @@ Sub ProcessReport_Live()
         Set wsBDX = reportWB.Worksheets.Add(After:=reportWB.Sheets(reportWB.Sheets.Count))
         wsBDX.Name = "Approved BDX"
         
-        ' --- THE FIX IS HERE: Added UpdateLinks:=0 to prevent prompts for source files ---
         Set qlikviewWB = Workbooks.Open(Filename:=qlikviewFilePath, UpdateLinks:=0, ReadOnly:=True)
         Set sourceSheet = qlikviewWB.Worksheets(1)
         qvLastRow = sourceSheet.Cells(sourceSheet.Rows.Count, "F").End(xlUp).Row
@@ -280,10 +318,8 @@ Sub ProcessReport_Live()
         Set wsOffboard = reportWB.Worksheets.Add(After:=wsBDX)
         wsOffboard.Name = "Offboard Analysis"
         
-        wsBDX.Activate
-    
     Else
-        MsgBox "Steps 10 through 13 were skipped because the file path in Home!E12 is missing or invalid.", vbExclamation
+        MsgBox "Steps 10 onwards were skipped because the file path in Home!E12 is missing or invalid.", vbExclamation
     End If
 
     '==================================================================================
