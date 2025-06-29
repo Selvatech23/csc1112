@@ -229,7 +229,6 @@ Sub ProcessReport_Steps_1_to_11_Final()
             
             If bdxLastRow > 1 Then
                 ' Action 11.4: Convert Column F in BDX to Number for correct comparison
-                ' This method parses the column and applies the General format, which correctly converts text-to-numbers.
                 wsBDX.Range("F2:F" & bdxLastRow).TextToColumns Destination:=wsBDX.Range("F2"), _
                     DataType:=xlDelimited, _
                     TextQualifier:=xlDoubleQuote, _
@@ -243,8 +242,9 @@ Sub ProcessReport_Steps_1_to_11_Final()
                 ' VLOOKUP for "Case Status"
                 wsBDX.Range("K2:K" & bdxLastRow).Formula = "=IFERROR(VLOOKUP(B2,TempBDXLookup!A:C,3,FALSE),""Not Found"")"
                 
-                ' Comparison formula
-                wsBDX.Range("L2:L" & bdxLastRow).Formula = "=F2=J2"
+                ' --- THIS IS THE IMPROVED LINE ---
+                ' Comparison formula (now handles "Not Found" cases)
+                wsBDX.Range("L2:L" & bdxLastRow).Formula = "=IF(J2=""Not Found"", ""Not Found"", F2=J2)"
                 
                 ' Action 11.6: Convert formulas to static values
                 wsBDX.Range("J2:L" & bdxLastRow).Value = wsBDX.Range("J2:L" & bdxLastRow).Value
