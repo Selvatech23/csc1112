@@ -1,6 +1,6 @@
 Option Explicit
 
-Sub ProcessReport_Live_Final()
+Sub ProcessReport_Final_Automated()
 
     '==================================================================================
     '===[ SETUP (ENHANCED & USER-FRIENDLY) ]===========================================
@@ -95,13 +95,10 @@ Sub ProcessReport_Live_Final()
     End If
 
     '==================================================================================
-    '===[ STEP 6: CREATE PIVOT TABLE ("Analysis" Sheet) - CORRECTED LOGIC ]============
+    '===[ STEP 6: CREATE PIVOT TABLE ("Analysis" Sheet) ]==============================
     '==================================================================================
     
-    Dim wsPivot As Worksheet
-    Dim pvtCache As PivotCache
-    Dim pvtTable As PivotTable
-    Dim pvtSourceRange As Range
+    Dim wsPivot As Worksheet, pvtCache As PivotCache, pvtTable As PivotTable, pvtSourceRange As Range
     
     Application.DisplayAlerts = False: On Error Resume Next
     reportWB.Worksheets("Analysis").Delete
@@ -112,7 +109,6 @@ Sub ProcessReport_Live_Final()
     
     If lastRow > 21 Then
         Set pvtSourceRange = wsReport.Range("A21:E" & lastRow)
-        
         Set pvtCache = reportWB.PivotCaches.Create(SourceType:=xlDatabase, SourceData:=pvtSourceRange, Version:=8)
         Set pvtTable = pvtCache.CreatePivotTable(TableDestination:=wsPivot.Range("A3"), TableName:="AnalysisPivot", DefaultVersion:=8)
         
@@ -121,11 +117,8 @@ Sub ProcessReport_Live_Final()
             .PivotFields(" REVIEW STATUS ").Orientation = xlRowField
             .PivotFields(" SENT ? (Yes/No)").Orientation = xlRowField
             .PivotFields(" REASON").Orientation = xlRowField
-            
             .AddDataField .PivotFields(" CIS CODE "), "Count of  CIS CODE ", xlCount
-            
             .PivotFields(" SENT ? (Yes/No)").Orientation = xlColumnField
-            
             .RepeatAllLabels xlRepeatLabels
             .RowAxisLayout xlCompactRow
         End With
@@ -323,13 +316,50 @@ Sub ProcessReport_Live_Final()
     End If
 
     '==================================================================================
-    '===[ FINISH ]=====================================================================
+    '===[ FINISH (WITH CUSTOM SAVE LOGIC) ]============================================
     '==================================================================================
     
-    reportWB.Save
-    reportWB.Worksheets("GBCLM_REPORT").Activate
+    Dim saveFolderPath As String, saveFileName As String, fullSavePath As String
+    Dim finalMessage As String
+    
+    saveFolderPath = wsHome.Range("E13").Value
+    saveFileName = wsHome.Range("E14").Value
+    
+    If saveFolderPath <> "" And saveFileName <> "" Then
+        ' User has specified a save location and name
+        
+        ' Ensure folder path ends with a backslash
+        If Right(saveFolderPath, 1) <> "\" Then
+            saveFolderPath = saveFolderPath & "\"
+        End If
+        
+        ' Check if the directory exists
+        If Dir(saveFolderPath, vbDirectory) = "" Then
+            ' Folder does not exist, save in original location as a fallback
+            reportWB.Save
+            finalMessage = "The specified save folder does not exist." & vbCrLf & _
+                           "Report was saved in its original location instead:" & vbCrLf & reportWB.FullName
+        Else
+            ' Folder exists, proceed with SaveAs
+            fullSavePath = saveFolderPath & saveFileName
+            
+            ' Save as .xlsx format, overwriting if it exists
+            Application.DisplayAlerts = False
+            reportWB.SaveAs Filename:=fullSavePath, FileFormat:=xlOpenXMLWorkbook, ConflictResolution:=xlLocalSessionChanges
+            Application.DisplayAlerts = True
+            
+            finalMessage = "Report successfully saved as an .xlsx file to:" & vbCrLf & fullSavePath & ".xlsx"
+        End If
+    Else
+        ' Fallback: Save in the current location if path/name are not specified
+        reportWB.Save
+        finalMessage = "Report saved in its original location:" & vbCrLf & reportWB.FullName
+    End If
+    
+    ' Close the processed report workbook
+    reportWB.Close SaveChanges:=False
+    
     Application.ScreenUpdating = True
-    MsgBox "Process complete! All steps have been successfully executed." & vbCrLf & _
-           "The report has been saved.", vbInformation
+    MsgBox "Process complete!" & vbCrLf & vbCrLf & finalMessage, vbInformation
 
 End Sub
