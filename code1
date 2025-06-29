@@ -1,6 +1,38 @@
-'--- ADDED AS REQUESTED: Convert formulas to values using Paste Special ---
-vlookupRange.Copy
-vlookupRange.PasteSpecial Paste:=xlPasteValues
+Sub bdx()
+'
+' bdx Macro
+'
 
-' This line clears the "marching ants" (the copy border) from the screen.
-Application.CutCopyMode = False
+'
+    Sheets("FEN Records").Select
+    Range("A2:E2").Select
+    Range(Selection, Selection.End(xlDown)).Select
+    Selection.Copy
+    Range("A12855").Select
+    Workbooks.Add
+    ActiveSheet.Paste
+    Columns("A:A").EntireColumn.AutoFit
+    Selection.Columns.AutoFit
+    Columns("A:A").Select
+    Selection.Replace What:="FEN-", Replacement:="", LookAt:=xlPart, _
+        SearchOrder:=xlByRows, MatchCase:=False, SearchFormat:=False, _
+        ReplaceFormat:=False, FormulaVersion:=xlReplaceFormula2
+    Windows("26062025.xlsx").Activate
+    Sheets("Approved BDX").Select
+    Application.CutCopyMode = False
+    ActiveCell.FormulaR1C1 = "=VLOOKUP(RC[-8],[Book5]Sheet1!C1:C2,2,0)"
+    Range("J2").Select
+    Selection.AutoFill Destination:=Range("J2:J39")
+    Range("J2:J39").Select
+    Range("K2").Select
+    ActiveCell.FormulaR1C1 = "=VLOOKUP(RC[-9],[Book5]Sheet1!C1:C3,3,0)"
+    Range("K2").Select
+    Selection.AutoFill Destination:=Range("K2:K39")
+    Range("K2:K39").Select
+    Range("L2").Select
+    Application.CutCopyMode = False
+    ActiveCell.FormulaR1C1 = "=RC[-6]=RC[-2]"
+    Range("L2").Select
+    Selection.AutoFill Destination:=Range("L2:L39")
+    Range("L2:L39").Select
+End Sub
