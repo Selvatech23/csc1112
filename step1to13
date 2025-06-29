@@ -1,6 +1,6 @@
 Option Explicit
 
-Sub ProcessReport_Steps_1_to_13_Final()
+Sub ProcessReport_Steps_1_to_13_FlexibleLabels()
 
     '==================================================================================
     '===[ SETUP ]======================================================================
@@ -18,9 +18,8 @@ Sub ProcessReport_Steps_1_to_13_Final()
     Dim filePathFromCell As String, wsHome As Worksheet
 
     '==================================================================================
-    '===[ STEPS 1-9 (THE STABLE, WORKING BASE) ]=======================================
+    '===[ STEPS 1-7 (UNCHANGED PREP WORK) ]============================================
     '==================================================================================
-    '--- Steps 1 through 9 are completely unchanged ---
     
     wsReport.Columns("A:A").TextToColumns Destination:=wsReport.Range("A1"), DataType:=xlDelimited, TextQualifier:=xlDoubleQuote, ConsecutiveDelimiter:=False, Tab:=False, Semicolon:=False, Comma:=False, Space:=False, Other:=True, OtherChar:="|"
     wsReport.Columns("A:A").Delete: wsReport.Cells.EntireColumn.AutoFit
@@ -46,14 +45,9 @@ Sub ProcessReport_Steps_1_to_13_Final()
         If Not dataToCopy Is Nothing Then dataToCopy.Copy wsFEN.Range("A2"): wsFEN.Cells.EntireColumn.AutoFit
         wsReport.AutoFilterMode = False
     End If
-    wsReport.Range("C2").Value = "Total Number of Individual Customers in Fenergo Database": wsReport.Range("C3").Value = "Total No. of Customers Excluded from Screening from Fenergo Database"
-    wsReport.Range("C4").Value = "1 CIS with only existing inflight NCTO/RRA Reason. No valid review": wsReport.Range("C5").Value = "02 CIS with only existing Cancelled. Reason: No valid review"
-    wsReport.Range("C6").Value = "3. Unassigned / No review exist(s)": wsReport.Range("C7").Value = "4. Technical Issue(s) occurred in Fenergo Database"
-    wsReport.Range("C8").Value = "Total No. of Customers Sent to Screening from Fenergo Database": wsReport.Range("C9").Value = "Difference Between Total and Combination of Excluded & Included"
-    wsReport.Range("C11").Value = "No. of Customers Excluded from Screening from Fenergo Database (In Today's report)": wsReport.Range("C12").Value = "No. of Customers Excluded from Screening from Fenergo Database (In Previous day report)"
-    wsReport.Range("C13").Value = "Change in no. of Customers Excluded from Screening": wsReport.Range("C14").Value = "Change in no of Customers Excluded from Screening (In Percentage)"
-    wsReport.Range("C16").Value = "Total Number of Individual Customers in Fenergo Database (In Today's report)": wsReport.Range("C17").Value = "Total Number of Individual Customers in Fenergo Database (In Previous day report)"
-    wsReport.Range("C18").Value = "Net Change in Total Number of Individual Customers": wsReport.Columns("C:C").AutoFit
+    
+    '--- The block of hardcoded labels has been moved into the logic below ---
+
     If lastRow > 21 Then
         Dim sourceRange As Range, uniqueLastRow As Long
         Application.DisplayAlerts = False: On Error Resume Next: reportWB.Worksheets("Unique CIS").Delete
@@ -69,30 +63,10 @@ Sub ProcessReport_Steps_1_to_13_Final()
         With wsUniqueCIS.Range("A1"): .Value = "CIS CODE": .Interior.Color = RGB(173, 216, 230): End With
         wsUniqueCIS.Columns("A:A").AutoFit
     End If
-    Dim prevDayValueC2 As Variant, prevDayValueC3 As Variant
-    On Error Resume Next: Set wsHome = ThisWorkbook.Worksheets("Home"): On Error GoTo 0
-    prevDayValueC2 = 0: prevDayValueC3 = 0
-    If Not wsHome Is Nothing Then
-        filePathFromCell = wsHome.Range("E10").Value
-        If Dir(filePathFromCell) <> "" Then
-            Set prevDayWB = Workbooks.Open(filePathFromCell, ReadOnly:=True)
-            prevDayValueC2 = prevDayWB.Worksheets("GBCLM_REPORT").Range("G2").Value
-            prevDayValueC3 = prevDayWB.Worksheets("GBCLM_REPORT").Range("G3").Value
-            prevDayWB.Close SaveChanges:=False
-        End If
-    End If
-    Dim fenLastRow As Long, fenSentCol As String
-    fenLastRow = wsFEN.Cells(wsFEN.Rows.Count, "A").End(xlUp).Row: fenSentCol = "D"
-    With wsReport
-        .Range("G2").Formula = "=COUNTA('FEN Records'!A2:A" & fenLastRow & ")": .Range("G3").Formula = "=COUNTIF('FEN Records'!" & fenSentCol & ":" & fenSentCol & ",""No"")"
-        .Range("G4").Formula = "=COUNTIF('FEN Records'!" & fenSentCol & ":" & fenSentCol & ",""No"")": .Range("G5").Value = 0: .Range("G6").Value = 0: .Range("G7").Value = 0
-        .Range("G8").Formula = "=COUNTIF('FEN Records'!" & fenSentCol & ":" & fenSentCol & ",""Yes"")": .Range("G9").Formula = "=G2-(G3+G8)"
-        .Range("G11").Formula = "=G3": .Range("G12").Value = prevDayValueC3: .Range("G13").Formula = "=G11-G12"
-        .Range("G14").Formula = "=IFERROR(G13/G11,0)": .Range("G14").NumberFormat = "0.00%": .Range("G16").Formula = "=G2"
-        .Range("G17").Value = prevDayValueC2: .Range("G18").Formula = "=G16-G17": .Columns("G:G").AutoFit
-    End With
-    Dim wsAdded As Worksheet, wsRemoved As Worksheet
-    Application.DisplayAlerts = False: On Error Resume Next: reportWB.Worksheets("Space issue").Delete: reportWB.Worksheets("Added").Delete: reportWB.Worksheets("Removed").Delete
+    
+    '--- Prepare sheets for later steps before opening external files
+    Application.DisplayAlerts = False: On Error Resume Next
+    reportWB.Worksheets("Space issue").Delete: reportWB.Worksheets("Added").Delete: reportWB.Worksheets("Removed").Delete
     On Error GoTo 0: Application.DisplayAlerts = True
     Set wsSpace = reportWB.Worksheets.Add(After:=reportWB.Sheets(reportWB.Sheets.Count)): wsSpace.Name = "Space issue"
     With wsSpace.Range("A1"): .Value = "CIS CODE": .Interior.Color = RGB(173, 216, 230): End With
@@ -103,46 +77,108 @@ Sub ProcessReport_Steps_1_to_13_Final()
             .Replace What:="FEN-", Replacement:="", LookAt:=xlPart, MatchCase:=False: .RemoveDuplicates Columns:=1, Header:=xlNo
         End With
     End If
-    Dim lookupFileName As String
-    If filePathFromCell <> "" And Dir(filePathFromCell) <> "" Then
-        lookupFileName = Mid(filePathFromCell, InStrRev(filePathFromCell, "\") + 1)
-        Dim spaceLastRow As Long: spaceLastRow = wsSpace.Cells(wsSpace.Rows.Count, "A").End(xlUp).Row
-        If spaceLastRow > 1 Then
-            Dim vlookupRange As Range: Set vlookupRange = wsSpace.Range("B2:B" & spaceLastRow)
-            vlookupRange.Formula = "=IFERROR(VLOOKUP(A2,'[" & lookupFileName & "]Space issue'!A:B,2,FALSE),""Not Found"")"
-            vlookupRange.Copy: vlookupRange.PasteSpecial Paste:=xlPasteValues: Application.CutCopyMode = False
-        End If
-    End If
-    wsSpace.Cells.EntireColumn.AutoFit
-    Dim wsPreviousFEN As Worksheet, helperCol As Long
+    Dim wsAdded As Worksheet, wsRemoved As Worksheet
     Set wsAdded = reportWB.Worksheets.Add(After:=wsSpace): wsAdded.Name = "Added"
     Set wsRemoved = reportWB.Worksheets.Add(After:=wsAdded): wsRemoved.Name = "Removed"
-    wsFEN.Range("A1:E1").Copy wsAdded.Range("A1"): wsFEN.Range("A1:E1").Copy wsRemoved.Range("A1")
-    If filePathFromCell <> "" And Dir(filePathFromCell) <> "" Then
-        Set prevDayWB = Workbooks.Open(filePathFromCell, ReadOnly:=True)
-        On Error Resume Next: Set wsPreviousFEN = prevDayWB.Worksheets("FEN Records"): On Error GoTo 0
-        If wsPreviousFEN Is Nothing Then
-            MsgBox "Could not find 'FEN Records' sheet in previous day's file.", vbExclamation: prevDayWB.Close False
-        Else
-            helperCol = 6: wsFEN.Cells(1, helperCol).Value = "Match Check"
-            Dim currentLastRow As Long: currentLastRow = wsFEN.Cells(wsFEN.Rows.Count, "A").End(xlUp).Row
-            If currentLastRow > 1 Then wsFEN.Range("F2:F" & currentLastRow).FormulaR1C1 = "=COUNTIF('[" & prevDayWB.Name & "]FEN Records'!C1,RC1)"
-            On Error Resume Next
-            wsFEN.Range("A1:F" & currentLastRow).AutoFilter Field:=helperCol, Criteria1:="0"
-            If wsFEN.AutoFilter.Range.Columns(1).SpecialCells(xlCellTypeVisible).Count > 1 Then wsFEN.Range("A2:E" & currentLastRow).SpecialCells(xlCellTypeVisible).Copy wsAdded.Range("A2")
-            wsFEN.AutoFilterMode = False: wsFEN.Columns(helperCol).Delete: On Error GoTo 0
-            Dim wsTemp As Worksheet: Set wsTemp = reportWB.Worksheets.Add
-            wsPreviousFEN.UsedRange.Copy wsTemp.Range("A1"): helperCol = 6: wsTemp.Cells(1, helperCol).Value = "Match Check"
-            Dim previousLastRow As Long: previousLastRow = wsTemp.Cells(wsTemp.Rows.Count, "A").End(xlUp).Row
-            If previousLastRow > 1 Then wsTemp.Range("F2:F" & previousLastRow).Formula = "=COUNTIF('FEN Records'!A:A,A2)"
-            On Error Resume Next
-            wsTemp.Range("A1:F" & previousLastRow).AutoFilter Field:=helperCol, Criteria1:="0"
-            If wsTemp.AutoFilter.Range.Columns(1).SpecialCells(xlCellTypeVisible).Count > 1 Then wsTemp.Range("A2:E" & previousLastRow).SpecialCells(xlCellTypeVisible).Copy wsRemoved.Range("A2")
-            Application.DisplayAlerts = False: wsTemp.Delete: Application.DisplayAlerts = True
+    
+    '==================================================================================
+    '===[ STEP 8: PREVIOUS DAY COMPARISONS (NOW WITH DYNAMIC LABELS) ]=================
+    '==================================================================================
+    Dim prevDayValueC2 As Variant, prevDayValueC3 As Variant
+    On Error Resume Next: Set wsHome = ThisWorkbook.Worksheets("Home"): On Error GoTo 0
+    prevDayValueC2 = 0: prevDayValueC3 = 0
+    
+    If Not wsHome Is Nothing Then
+        filePathFromCell = wsHome.Range("E10").Value
+        '--- Check if previous day's file exists ---
+        If Dir(filePathFromCell) <> "" Then
+            ' --- FILE EXISTS: Use it for dynamic labels and comparisons ---
+            
+            ' 1. OPEN the previous day's workbook
+            Set prevDayWB = Workbooks.Open(filePathFromCell, ReadOnly:=True)
+            
+            ' 2. DO ALL the tasks that depend on this workbook
+            
+            ' Task A: Copy dashboard labels from previous report for consistency
+            prevDayWB.Worksheets("GBCLM_REPORT").Range("C2:C18").Copy Destination:=wsReport.Range("C2:C18")
+            
+            ' Task B: Get the summary values for the dashboard
+            prevDayValueC2 = prevDayWB.Worksheets("GBCLM_REPORT").Range("G2").Value
+            prevDayValueC3 = prevDayWB.Worksheets("GBCLM_REPORT").Range("G3").Value
+            
+            ' Task C: Perform VLOOKUP for "Space issue" sheet
+            Dim spaceLastRow As Long, vlookupRange As Range
+            spaceLastRow = wsSpace.Cells(wsSpace.Rows.Count, "A").End(xlUp).Row
+            If spaceLastRow > 1 Then
+                Set vlookupRange = wsSpace.Range("B2:B" & spaceLastRow)
+                vlookupRange.Formula = "=IFERROR(VLOOKUP(A2,'[" & prevDayWB.Name & "]Space issue'!A:B,2,FALSE),""Not Found"")"
+                vlookupRange.Value = vlookupRange.Value
+            End If
+            wsSpace.Cells.EntireColumn.AutoFit
+            
+            ' Task D: Perform "Added" / "Removed" reconciliation
+            wsFEN.Range("A1:E1").Copy wsAdded.Range("A1"): wsFEN.Range("A1:E1").Copy wsRemoved.Range("A1")
+            Dim wsPreviousFEN As Worksheet, helperCol As Long
+            On Error Resume Next: Set wsPreviousFEN = prevDayWB.Worksheets("FEN Records"): On Error GoTo 0
+            If wsPreviousFEN Is Nothing Then
+                MsgBox "Could not find 'FEN Records' sheet in previous day's file.", vbExclamation
+            Else
+                helperCol = 6: wsFEN.Cells(1, helperCol).Value = "Match Check"
+                Dim currentLastRow As Long: currentLastRow = wsFEN.Cells(wsFEN.Rows.Count, "A").End(xlUp).Row
+                If currentLastRow > 1 Then wsFEN.Range("F2:F" & currentLastRow).FormulaR1C1 = "=COUNTIF('[" & prevDayWB.Name & "]FEN Records'!C1,RC1)"
+                wsFEN.Range("F1:F" & currentLastRow).Value = wsFEN.Range("F1:F" & currentLastRow).Value
+                
+                On Error Resume Next
+                wsFEN.Range("A1:F" & currentLastRow).AutoFilter Field:=helperCol, Criteria1:="0"
+                If wsFEN.AutoFilter.Range.Columns(1).SpecialCells(xlCellTypeVisible).Count > 1 Then wsFEN.Range("A2:E" & currentLastRow).SpecialCells(xlCellTypeVisible).Copy wsAdded.Range("A2")
+                wsFEN.AutoFilterMode = False: wsFEN.Columns(helperCol).Delete: On Error GoTo 0
+                
+                Dim wsTemp As Worksheet: Set wsTemp = reportWB.Worksheets.Add
+                wsPreviousFEN.UsedRange.Copy wsTemp.Range("A1"): helperCol = 6: wsTemp.Cells(1, helperCol).Value = "Match Check"
+                Dim previousLastRow As Long: previousLastRow = wsTemp.Cells(wsTemp.Rows.Count, "A").End(xlUp).Row
+                If previousLastRow > 1 Then wsTemp.Range("F2:F" & previousLastRow).Formula = "=COUNTIF('FEN Records'!A:A,A2)"
+                wsTemp.Range("F1:F" & previousLastRow).Value = wsTemp.Range("F1:F" & previousLastRow).Value
+
+                On Error Resume Next
+                wsTemp.Range("A1:F" & previousLastRow).AutoFilter Field:=helperCol, Criteria1:="0"
+                If wsTemp.AutoFilter.Range.Columns(1).SpecialCells(xlCellTypeVisible).Count > 1 Then wsTemp.Range("A2:E" & previousLastRow).SpecialCells(xlCellTypeVisible).Copy wsRemoved.Range("A2")
+                Application.DisplayAlerts = False: wsTemp.Delete: Application.DisplayAlerts = True
+                
+                wsAdded.Cells.EntireColumn.AutoFit: wsRemoved.Cells.EntireColumn.AutoFit
+            End If
+            
+            ' 3. CLOSE the workbook now that all dependencies are resolved.
             prevDayWB.Close SaveChanges:=False
-            wsAdded.Cells.EntireColumn.AutoFit: wsRemoved.Cells.EntireColumn.AutoFit
+        Else
+            ' --- FALLBACK: If file doesn't exist, use hardcoded labels ---
+            wsReport.Range("C2").Value = "Total Number of Individual Customers in Fenergo Database": wsReport.Range("C3").Value = "Total No. of Customers Excluded from Screening from Fenergo Database"
+            wsReport.Range("C4").Value = "1 CIS with only existing inflight NCTO/RRA Reason. No valid review": wsReport.Range("C5").Value = "02 CIS with only existing Cancelled. Reason: No valid review"
+            wsReport.Range("C6").Value = "3. Unassigned / No review exist(s)": wsReport.Range("C7").Value = "4. Technical Issue(s) occurred in Fenergo Database"
+            wsReport.Range("C8").Value = "Total No. of Customers Sent to Screening from Fenergo Database": wsReport.Range("C9").Value = "Difference Between Total and Combination of Excluded & Included"
+            wsReport.Range("C11").Value = "No. of Customers Excluded from Screening from Fenergo Database (In Today's report)": wsReport.Range("C12").Value = "No. of Customers Excluded from Screening from Fenergo Database (In Previous day report)"
+            wsReport.Range("C13").Value = "Change in no. of Customers Excluded from Screening": wsReport.Range("C14").Value = "Change in no of Customers Excluded from Screening (In Percentage)"
+            wsReport.Range("C16").Value = "Total Number of Individual Customers in Fenergo Database (In Today's report)": wsReport.Range("C17").Value = "Total Number of Individual Customers in Fenergo Database (In Previous day report)"
+            wsReport.Range("C18").Value = "Net Change in Total Number of Individual Customers"
+            ' Previous day values will remain 0 as initialized
         End If
     End If
+    
+    '==================================================================================
+    '===[ STEP 9: POPULATE DASHBOARD & CLIENT COMPLETENESS ]===========================
+    '==================================================================================
+    wsReport.Columns("C:C").AutoFit 'Autofit column C after labels are populated
+    
+    Dim fenLastRow As Long, fenSentCol As String
+    fenLastRow = wsFEN.Cells(wsFEN.Rows.Count, "A").End(xlUp).Row: fenSentCol = "D"
+    With wsReport
+        .Range("G2").Formula = "=COUNTA('FEN Records'!A2:A" & fenLastRow & ")": .Range("G3").Formula = "=COUNTIF('FEN Records'!" & fenSentCol & ":" & fenSentCol & ",""No"")"
+        .Range("G4").Formula = "=COUNTIF('FEN Records'!" & fenSentCol & ":" & fenSentCol & ",""No"")": .Range("G5").Value = 0: .Range("G6").Value = 0: .Range("G7").Value = 0
+        .Range("G8").Formula = "=COUNTIF('FEN Records'!" & fenSentCol & ":" & fenSentCol & ",""Yes"")": .Range("G9").Formula = "=G2-(G3+G8)"
+        .Range("G11").Formula = "=G3": .Range("G12").Value = prevDayValueC3: .Range("G13").Formula = "=G11-G12"
+        .Range("G14").Formula = "=IFERROR(G13/G11,0)": .Range("G14").NumberFormat = "0.00%": .Range("G16").Formula = "=G2"
+        .Range("G17").Value = prevDayValueC2: .Range("G18").Formula = "=G16-G17": .Columns("G:G").AutoFit
+    End With
+    
     Dim wsClient As Worksheet, txtFilePath As String
     If Not wsHome Is Nothing Then
         txtFilePath = wsHome.Range("E11").Value
@@ -161,21 +197,15 @@ Sub ProcessReport_Steps_1_to_13_Final()
     End If
     
     '==================================================================================
-    '===[ STEP 10: IMPORT DATA FROM QLIKVIEW FILE ]====================================
+    '===[ STEPS 10-13: BDX & OFFBOARD ANALYSIS ]=======================================
     '==================================================================================
-    
-    Dim wsBDX As Worksheet
-    Dim qlikviewFilePath As String
-    Dim qlikviewWB As Workbook
-    Dim sourceSheet As Worksheet
-    Dim qvLastRow As Long
-    Dim copyRange As Range
+    Dim wsBDX As Worksheet, qlikviewFilePath As String, qlikviewWB As Workbook
+    Dim sourceSheet As Worksheet, qvLastRow As Long, copyRange As Range
     
     If Not wsHome Is Nothing Then
         qlikviewFilePath = wsHome.Range("E12").Value
         
         If qlikviewFilePath <> "" And Dir(qlikviewFilePath) <> "" Then
-            ' Action 10.1: Create the "Approved BDX" sheet
             Application.DisplayAlerts = False: On Error Resume Next
             reportWB.Worksheets("Approved BDX").Delete
             On Error GoTo 0: Application.DisplayAlerts = True
@@ -183,98 +213,58 @@ Sub ProcessReport_Steps_1_to_13_Final()
             Set wsBDX = reportWB.Worksheets.Add(After:=reportWB.Sheets(reportWB.Sheets.Count))
             wsBDX.Name = "Approved BDX"
             
-            ' Action 10.2: Open Qlikview file, copy data, and close
             Set qlikviewWB = Workbooks.Open(qlikviewFilePath, ReadOnly:=True)
             Set sourceSheet = qlikviewWB.Worksheets(1)
-            
             qvLastRow = sourceSheet.Cells(sourceSheet.Rows.Count, "F").End(xlUp).Row
             If qvLastRow > 0 Then
                 Set copyRange = sourceSheet.Range("F1:N" & qvLastRow)
                 copyRange.Copy Destination:=wsBDX.Range("A1")
             End If
-            
             qlikviewWB.Close SaveChanges:=False
             
-            ' Action 10.3: Add new headers
-            wsBDX.Range("J1").Value = "Case feeding to GCS"
-            wsBDX.Range("K1").Value = "Case Status"
-            wsBDX.Range("L1").Value = "Comparison"
-            wsBDX.Range("M1").Value = "Comments"
-            
+            wsBDX.Range("J1").Value = "Case feeding to GCS": wsBDX.Range("K1").Value = "Case Status"
+            wsBDX.Range("L1").Value = "Comparison": wsBDX.Range("M1").Value = "Comments"
             wsBDX.Cells.EntireColumn.AutoFit
             
-            '==================================================================================
-            '===[ STEP 11: POPULATE BDX SHEET WITH LOOKUPS & COMPARISON ]======================
-            '==================================================================================
-            Dim wsTempLookup As Worksheet
-            Dim bdxLastRow As Long
-            
-            ' Action 11.1: Create a temporary sheet for the lookup table
-            Application.DisplayAlerts = False: On Error Resume Next
-            reportWB.Worksheets("TempBDXLookup").Delete
+            '--- Step 11: BDX Lookups
+            Dim wsTempLookup As Worksheet, bdxLastRow As Long
+            Application.DisplayAlerts = False: On Error Resume Next: reportWB.Worksheets("TempBDXLookup").Delete
             On Error GoTo 0: Application.DisplayAlerts = True
-            Set wsTempLookup = reportWB.Worksheets.Add(After:=wsBDX)
-            wsTempLookup.Name = "TempBDXLookup"
-            
-            ' Action 11.2: Copy data from FEN Records and clean it for lookup
+            Set wsTempLookup = reportWB.Worksheets.Add(After:=wsBDX): wsTempLookup.Name = "TempBDXLookup"
             If fenLastRow > 1 Then
                 wsFEN.Range("A2:E" & fenLastRow).Copy wsTempLookup.Range("A1")
                 wsTempLookup.Columns("A:A").Replace What:="FEN-", Replacement:="", LookAt:=xlPart, MatchCase:=False
             End If
             
-            ' Action 11.3: Find last row in BDX sheet
             bdxLastRow = wsBDX.Cells(wsBDX.Rows.Count, "A").End(xlUp).Row
-            
             If bdxLastRow > 1 Then
-                ' Action 11.4: Convert Column F in BDX to Number for correct comparison
                 wsBDX.Range("F2:F" & bdxLastRow).TextToColumns Destination:=wsBDX.Range("F2"), _
                     DataType:=xlDelimited, TextQualifier:=xlDoubleQuote, _
                     ConsecutiveDelimiter:=False, Tab:=False, Semicolon:=False, Comma:=False, Space:=False, Other:=False, _
                     FieldInfo:=Array(1, xlGeneralFormat)
 
-                ' Action 11.5: Add VLOOKUP formulas and comparison formula
                 wsBDX.Range("J2:J" & bdxLastRow).Formula = "=IFERROR(VLOOKUP(B2,TempBDXLookup!A:B,2,FALSE),""Not Found"")"
                 wsBDX.Range("K2:K" & bdxLastRow).Formula = "=IFERROR(VLOOKUP(B2,TempBDXLookup!A:C,3,FALSE),""Not Found"")"
                 wsBDX.Range("L2:L" & bdxLastRow).Formula = "=IF(J2=""Not Found"", ""Not Found"", F2=J2)"
-                
-                ' Action 11.6: Convert formulas to static values
                 wsBDX.Range("J2:L" & bdxLastRow).Value = wsBDX.Range("J2:L" & bdxLastRow).Value
                 
-                '==================================================================================
-                '===[ STEP 12: POPULATE COMMENTS IN BDX SHEET ]====================================
-                '==================================================================================
-                
-                ' Action 12.1: Populate Comments column based on conditions in K and L
+                '--- Step 12: BDX Comments
                 wsBDX.Range("M2:M" & bdxLastRow).Formula = "=IF(AND(K2=""Approved"",L2=TRUE),""Latest case feed"","""")"
-                
-                ' Action 12.2: Convert comments formula to static values
                 wsBDX.Range("M2:M" & bdxLastRow).Value = wsBDX.Range("M2:M" & bdxLastRow).Value
-                
-            End If ' End of If bdxLastRow > 1
+            End If
             
-            ' Action 11.7: Clean up by deleting the temporary lookup sheet
-            Application.DisplayAlerts = False
-            wsTempLookup.Delete
-            Application.DisplayAlerts = True
-            
+            Application.DisplayAlerts = False: wsTempLookup.Delete: Application.DisplayAlerts = True
             wsBDX.Cells.EntireColumn.AutoFit
             
-            '==================================================================================
-            '===[ STEP 13: CREATE OFFBOARD ANALYSIS SHEET ]====================================
-            '==================================================================================
+            '--- Step 13: Create Offboard Analysis Sheet
             Dim wsOffboard As Worksheet
-
-            ' Action 13.1: Delete the sheet if it already exists to ensure a clean slate
             Application.DisplayAlerts = False: On Error Resume Next
             reportWB.Worksheets("Offboard Analysis").Delete
             On Error GoTo 0: Application.DisplayAlerts = True
-
-            ' Action 13.2: Add a new, blank sheet after the BDX sheet
             Set wsOffboard = reportWB.Worksheets.Add(After:=wsBDX)
             wsOffboard.Name = "Offboard Analysis"
             
             wsBDX.Activate
-            ' End of BDX-related steps
         
         Else
             MsgBox "Steps 10 through 13 were skipped because the file path in Home!E12 is missing or invalid.", vbExclamation
