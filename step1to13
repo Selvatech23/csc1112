@@ -9,7 +9,7 @@ Sub ProcessReport_Live()
     Application.ScreenUpdating = False
     
     Dim macroWB As Workbook, reportWB As Workbook
-    Set macroWB = ThisWorkbook ' This is the workbook containing the macro code.
+    Set macroWB = ThisWorkbook
     
     Dim wsHome As Worksheet
     On Error Resume Next
@@ -20,19 +20,16 @@ Sub ProcessReport_Live()
         Exit Sub
     End If
     
-    '--- New logic to define the report workbook ---
     Dim reportFilePath As String
     reportFilePath = wsHome.Range("E9").Value
     
     If reportFilePath <> "" And Dir(reportFilePath) <> "" Then
-        ' Priority 1: A valid path is provided in E9. Open and use that workbook.
-        Set reportWB = Workbooks.Open(reportFilePath)
+        ' --- THE FIX IS HERE: Added UpdateLinks:=3 to auto-update links ---
+        Set reportWB = Workbooks.Open(Filename:=reportFilePath, UpdateLinks:=3)
     Else
-        ' Fallback: No path provided. Use the currently active workbook.
         Set reportWB = ActiveWorkbook
     End If
     
-    '--- Critical Safety Checks ---
     If reportWB Is Nothing Then
         MsgBox "No report workbook is active or specified. Please open a report and run again.", vbCritical
         Application.ScreenUpdating = True
@@ -46,7 +43,6 @@ Sub ProcessReport_Live()
         Exit Sub
     End If
 
-    '--- Proceed with the rest of the macro using the now-defined 'reportWB' ---
     Dim prevDayWB As Workbook
     Dim wsReport As Worksheet, wsFEN As Worksheet, wsUniqueCIS As Worksheet, wsSpace As Worksheet
     Set wsReport = reportWB.ActiveSheet
@@ -123,7 +119,8 @@ Sub ProcessReport_Live()
     
     filePathFromCell = wsHome.Range("E10").Value
     If Dir(filePathFromCell) <> "" Then
-        Set prevDayWB = Workbooks.Open(filePathFromCell, ReadOnly:=True)
+        ' --- THE FIX IS HERE: Added UpdateLinks:=0 to prevent prompts for source files ---
+        Set prevDayWB = Workbooks.Open(Filename:=filePathFromCell, UpdateLinks:=0, ReadOnly:=True)
         
         prevDayWB.Worksheets("GBCLM_REPORT").Range("C2:C18").Copy
         wsReport.Range("C2:C18").PasteSpecial Paste:=xlPasteAll
@@ -234,7 +231,8 @@ Sub ProcessReport_Live()
         Set wsBDX = reportWB.Worksheets.Add(After:=reportWB.Sheets(reportWB.Sheets.Count))
         wsBDX.Name = "Approved BDX"
         
-        Set qlikviewWB = Workbooks.Open(qlikviewFilePath, ReadOnly:=True)
+        ' --- THE FIX IS HERE: Added UpdateLinks:=0 to prevent prompts for source files ---
+        Set qlikviewWB = Workbooks.Open(Filename:=qlikviewFilePath, UpdateLinks:=0, ReadOnly:=True)
         Set sourceSheet = qlikviewWB.Worksheets(1)
         qvLastRow = sourceSheet.Cells(sourceSheet.Rows.Count, "F").End(xlUp).Row
         If qvLastRow > 0 Then
@@ -292,7 +290,7 @@ Sub ProcessReport_Live()
     '===[ FINISH ]=====================================================================
     '==================================================================================
     
-    reportWB.Save ' Save all changes to the report workbook.
+    reportWB.Save
     reportWB.Worksheets("GBCLM_REPORT").Activate
     Application.ScreenUpdating = True
     MsgBox "Process complete! All steps have been successfully executed." & vbCrLf & _
