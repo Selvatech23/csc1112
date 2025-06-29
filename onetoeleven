@@ -202,7 +202,6 @@ Sub ProcessReport_Steps_1_to_11_Final()
             wsBDX.Range("M1").Value = "Comments"
             
             wsBDX.Cells.EntireColumn.AutoFit
-            wsBDX.Activate
             
             '==================================================================================
             '===[ STEP 11: POPULATE BDX SHEET WITH LOOKUPS & COMPARISON ]======================
@@ -230,8 +229,13 @@ Sub ProcessReport_Steps_1_to_11_Final()
             
             If bdxLastRow > 1 Then
                 ' Action 11.4: Convert Column F in BDX to Number for correct comparison
-                wsBDX.Range("F2:F" & bdxLastRow).TextToColumns Destination:=wsBDX.Range("F2"), DataType:=xlDelimited, General:=True
-            
+                ' This method parses the column and applies the General format, which correctly converts text-to-numbers.
+                wsBDX.Range("F2:F" & bdxLastRow).TextToColumns Destination:=wsBDX.Range("F2"), _
+                    DataType:=xlDelimited, _
+                    TextQualifier:=xlDoubleQuote, _
+                    ConsecutiveDelimiter:=False, Tab:=False, Semicolon:=False, Comma:=False, Space:=False, Other:=False, _
+                    FieldInfo:=Array(1, xlGeneralFormat)
+
                 ' Action 11.5: Add VLOOKUP formulas and comparison formula
                 ' VLOOKUP for "Case feeding to GCS"
                 wsBDX.Range("J2:J" & bdxLastRow).Formula = "=IFERROR(VLOOKUP(B2,TempBDXLookup!A:B,2,FALSE),""Not Found"")"
@@ -252,6 +256,7 @@ Sub ProcessReport_Steps_1_to_11_Final()
             Application.DisplayAlerts = True
             
             wsBDX.Cells.EntireColumn.AutoFit
+            wsBDX.Activate
             ' End of Step 11
         
         Else
