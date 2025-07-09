@@ -1,0 +1,160 @@
+' --- Macro for the FIRST button: "List All Files" ---
+Sub ListFilesInSubfolders()
+
+    Const HomeSheetName As String = "Home"
+    Const PathCell As String = "B1"
+    Const ListSheetName As String = "File_List"
+    
+    Dim mainFolderPath As String
+    Dim fso As Object
+    Dim mainFolder As Object, subFolder As Object, fileItem As Object
+    Dim listSheet As Worksheet
+    Dim homeSheet As Worksheet
+    Dim currentRow As Long
+    
+    Application.ScreenUpdating = False
+    
+    ' --- Get User Input ---
+    On Error Resume Next
+    Set homeSheet = ThisWorkbook.Sheets(HomeSheetName)
+    On Error GoTo 0
+    If homeSheet Is Nothing Then
+        MsgBox "Error: A sheet named '" & HomeSheetName & "' was not found.", vbCritical: Exit Sub
+    End If
+    
+    mainFolderPath = homeSheet.Range(PathCell).Value
+    If mainFolderPath = "" Then
+        MsgBox "Please enter the Main Folder Path in cell " & PathCell & ".", vbExclamation: Exit Sub
+    End If
+    
+    Set fso = CreateObject("Scripting.FileSystemObject")
+    If Not fso.FolderExists(mainFolderPath) Then
+        MsgBox "The folder path you provided does not exist. Please check it.", vbCritical: Exit Sub
+    End If
+    
+    ' --- Prepare the "File_List" Sheet ---
+    On Error Resume Next
+    ThisWorkbook.Sheets(ListSheetName).Delete
+    On Error GoTo 0
+    
+    Set listSheet = ThisWorkbook.Sheets.Add(After:=homeSheet)
+    listSheet.Name = ListSheetName
+    
+    ' Create Headers
+    With listSheet
+        .Range("A1").Value = "Subfolder Path"
+        .Range("B1").Value = "Filename"
+        .Range("C1").Value = "Combine this file? (Select Yes/No)"
+        .Range("A1:C1").Font.Bold = True
+    End With
+    
+    ' --- Loop and List Files ---
+    currentRow = 2
+    Set mainFolder = fso.GetFolder(mainFolderPath)
+    For Each subFolder In mainFolder.SubFolders
+        For Each fileItem In subFolder.Files
+            ' Check if it's an Excel file
+            If LCase(fileItem.Name) Like "*.xls*" Then
+                listSheet.Cells(currentRow, "A").Value = subFolder.Path
+                listSheet.Cells(currentRow, "B").Value = fileItem.Name
+                currentRow = currentRow + 1
+            End If
+        Next fileItem
+    Next subFolder
+    
+    ' --- Add a Dropdown Menu for "Yes/No" selection ---
+    If currentRow > 2 Then
+        With listSheet.Range("C2:C" & currentRow - 1).Validation
+            .Delete
+            .Add Type:=xlValidateList, AlertStyle:=xlValidAlertStop, Operator:=xlBetween, Formula1:="Yes,No"
+            .IgnoreBlank = True
+            .InCellDropdown = True
+        End With
+    End If
+    
+    listSheet.Columns("A:C").AutoFit
+    Application.ScreenUpdating = True
+    
+    If currentRow = 2 Then
+         MsgBox "No Excel files were found in any of the subfolders.", vbInformation
+    Else
+         MsgBox "File list has been created. Please go to the '" & ListSheetName & "' sheet and select 'Yes' for the files you want to combine.", vbInformation
+    End If
+    listSheet.Activate
+End Sub
+
+
+' --- Macro for the SECOND button: "Combine Selected Files" ---
+Sub CombineSelectedFiles()
+
+    Const ListSheetName As String = "File_List"
+    
+    Dim listSheet As Worksheet, destSheet As Worksheet
+    Dim lastRow As Long, i As Long
+    Dim fullPath As String
+    Dim sourceWB As Workbook, thisWB As Workbook
+    Dim sourceSheet As Worksheet
+    Dim headerCopied As Boolean
+    Dim filesCombinedCount As Long
+    
+    Application.ScreenUpdating = False
+    
+    ' --- Find the list of files ---
+    On Error Resume Next
+    Set listSheet = ThisWorkbook.Sheets(ListSheetName)
+    On Error GoTo 0
+    If listSheet Is Nothing Then
+        MsgBox "Could not find the '" & ListSheetName & "' sheet. Please run Step 1 first.", vbCritical: Exit Sub
+    End If
+    
+    ' --- Prepare the destination sheet ---
+    Set thisWB = ThisWorkbook
+    On Error Resume Next
+    ThisWorkbook.Sheets("Combined_Data").Delete
+    On Error GoTo 0
+    Set destSheet = thisWB.Sheets.Add(After:=thisWB.Sheets(thisWB.Sheets.Count))
+    destSheet.Name = "Combined_Data"
+    
+    ' --- Loop through the list and combine files marked "Yes" ---
+    lastRow = listSheet.Cells(listSheet.Rows.Count, "A").End(xlUp).Row
+    headerCopied = False
+    filesCombinedCount = 0
+    
+    For i = 2 To lastRow
+        If LCase(listSheet.Cells(i, "C").Value) = "yes" Then
+            filesCombinedCount = filesCombinedCount + 1
+            fullPath = listSheet.Cells(i, "A").Value & "\" & listSheet.Cells(i, "B").Value
+            
+            Set sourceWB = Workbooks.Open(fullPath, ReadOnly:=True)
+            Set sourceSheet = sourceWB.Sheets(1)
+            
+            If headerCopied = False Then
+                ' This part is for the very first file, which is usually fine.
+                sourceSheet.UsedRange.Copy destSheet.Range("A1")
+                headerCopied = True
+            Else
+                ' --- THIS IS THE FIXED SECTION ---
+                ' We add a safety check to ensure there is more than one row before trying to copy.
+                If sourceSheet.UsedRange.Rows.Count > 1 Then
+                    ' If the check passes, we can safely run the copy command.
+                    sourceSheet.UsedRange.Offset(1, 0).Resize(sourceSheet.UsedRange.Rows.Count - 1).Copy destSheet.Cells(destSheet.Rows.Count, "A").End(xlUp).Row + 1
+                End If
+                ' If the check fails (the sheet only had a header), the code inside the If statement
+                ' is simply skipped, and no error occurs.
+            End If
+            
+            sourceWB.Close SaveChanges:=False
+        End If
+    Next i
+    
+    Application.ScreenUpdating = True
+    
+    If filesCombinedCount > 0 Then
+        destSheet.Columns.AutoFit
+        MsgBox "Success! " & filesCombinedCount & " selected files have been combined into the 'Combined_Data' sheet.", vbInformation
+    Else
+        destSheet.Delete
+        MsgBox "No files were marked with 'Yes' on the '" & ListSheetName & "' sheet. Nothing was combined.", vbExclamation
+    End If
+    
+End Sub
