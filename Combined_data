@@ -1,0 +1,132 @@
+' Main macro that will be assigned to the button
+Sub ProcessAndCombineData()
+
+    ' --- Configuration: Sheet and Cell for User Input ---
+    Const HomeSheetName As String = "Home"
+    Const InputCellAddress As String = "A2"
+    ' ----------------------------------------------------
+
+    Dim mainFolderPath As String
+    Dim fso As Object
+    Dim mainFolder As Object, subFolder As Object, fileItem As Object
+    Dim sourceWB As Workbook, thisWB As Workbook
+    Dim sourceSheet As Worksheet, destSheet As Worksheet
+    Dim nextRow As Long
+    Dim headerCopied As Boolean
+    Dim homeSheet As Worksheet
+    Dim finalSheetName As String
+
+    Set thisWB = ThisWorkbook
+    
+    ' --- 1. Get and Validate the Folder Path from the "Home" sheet ---
+    On Error Resume Next
+    Set homeSheet = thisWB.Sheets(HomeSheetName)
+    On Error GoTo 0
+    If homeSheet Is Nothing Then
+        MsgBox "Error: A sheet named '" & HomeSheetName & "' was not found.", vbCritical, "Setup Error"
+        Exit Sub
+    End If
+    
+    mainFolderPath = homeSheet.Range(InputCellAddress).Value
+    
+    If mainFolderPath = "" Then
+        MsgBox "Please enter a folder path in cell " & InputCellAddress & " on the '" & HomeSheetName & "' sheet.", vbExclamation, "Input Required"
+        Exit Sub
+    End If
+
+    ' --- 2. Find a Unique Name for the New Output Sheet ---
+    finalSheetName = GetUniqueSheetName("Combined_Data")
+    If finalSheetName = "" Then
+        MsgBox "Could not create a new sheet. Please check your workbook.", vbCritical, "Error"
+        Exit Sub
+    End If
+
+    ' --- 3. Start the Combination Process ---
+    Application.ScreenUpdating = False
+    Application.DisplayAlerts = False
+
+    Set fso = CreateObject("Scripting.FileSystemObject")
+    If Not fso.FolderExists(mainFolderPath) Then
+        MsgBox "The folder path you provided does not exist:" & vbCrLf & mainFolderPath, vbCritical, "Folder Not Found"
+        GoTo CleanUp
+    End If
+    
+    ' Create the new destination sheet
+    Set destSheet = thisWB.Sheets.Add(After:=thisWB.Sheets(thisWB.Sheets.Count))
+    destSheet.Name = finalSheetName
+    
+    Set mainFolder = fso.GetFolder(mainFolderPath)
+    headerCopied = False
+    
+    ' --- 4. Loop Through Folders and Files ---
+    For Each subFolder In mainFolder.SubFolders
+        For Each fileItem In subFolder.Files
+            If LCase(fso.GetExtensionName(fileItem.Path)) = "xlsx" Or LCase(fso.GetExtensionName(fileItem.Path)) = "xls" Then
+                Set sourceWB = Workbooks.Open(fileItem.Path, ReadOnly:=True)
+                Set sourceSheet = sourceWB.Sheets(1)
+                
+                If sourceSheet.UsedRange.Cells.Count > 1 Then ' Only process if sheet is not empty
+                    If headerCopied = False Then
+                        ' First file: copy everything including the header
+                        sourceSheet.UsedRange.Copy destSheet.Range("A1")
+                        headerCopied = True
+                    Else
+                        ' Subsequent files: copy data only (skip header row)
+                        If sourceSheet.UsedRange.Rows.Count > 1 Then
+                            nextRow = destSheet.Cells(destSheet.Rows.Count, "A").End(xlUp).Row + 1
+                            sourceSheet.UsedRange.Offset(1, 0).Resize(sourceSheet.UsedRange.Rows.Count - 1).Copy destSheet.Cells(nextRow, 1)
+                        End If
+                    End If
+                End If
+                
+                sourceWB.Close SaveChanges:=False
+            End If
+        Next fileItem
+    Next subFolder
+    
+    If headerCopied Then
+        destSheet.Columns.AutoFit
+        MsgBox "Success!" & vbCrLf & vbCrLf & "All data has been combined into the sheet named:" & vbCrLf & "'" & destSheet.Name & "'", vbInformation, "Process Complete"
+    Else
+        destSheet.Delete ' Delete the empty sheet if no files were found/processed
+        MsgBox "No Excel files with data were found in the subfolders.", vbExclamation, "No Files Found"
+    End If
+
+CleanUp:
+    ' Restore application settings and clean up objects
+    Application.ScreenUpdating = True
+    Application.DisplayAlerts = True
+    Set fso = Nothing
+    Set mainFolder = Nothing
+    Set subFolder = Nothing
+    Set fileItem = Nothing
+End Sub
+
+
+' Helper function to find a unique name for a new sheet
+Private Function GetUniqueSheetName(baseName As String) As String
+    Dim tempName As String
+    Dim counter As Integer
+    Dim ws As Worksheet
+    Dim sheetExists As Boolean
+
+    tempName = baseName
+    counter = 0
+
+    Do
+        sheetExists = False
+        For Each ws In ThisWorkbook.Worksheets
+            If LCase(ws.Name) = LCase(tempName) Then
+                sheetExists = True
+                Exit For
+            End If
+        Next ws
+
+        If sheetExists Then
+            counter = counter + 1
+            tempName = baseName & " (" & counter & ")"
+        End If
+    Loop While sheetExists
+
+    GetUniqueSheetName = tempName
+End Function
