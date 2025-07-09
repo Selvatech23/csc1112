@@ -1,0 +1,100 @@
+' --- Macro for the SECOND button: "Combine Selected Files" ---
+' --- VERSION 3: This version is more robust and handles blank sheets or unusual data layouts ---
+Sub CombineSelectedFiles()
+
+    Const ListSheetName As String = "File_List"
+    
+    Dim listSheet As Worksheet, destSheet As Worksheet
+    Dim lastRow As Long, i As Long
+    Dim fullPath As String
+    Dim sourceWB As Workbook, thisWB As Workbook
+    Dim sourceSheet As Worksheet
+    Dim headerCopied As Boolean
+    Dim filesCombinedCount As Long
+    
+    '--- NEW VARIABLES for the robust method ---
+    Dim sourceDataRange As Range
+    Dim lastUsedRow As Long
+    Dim lastUsedCol As Long
+
+    Application.ScreenUpdating = False
+    
+    ' --- Find the list of files ---
+    On Error Resume Next
+    Set listSheet = ThisWorkbook.Sheets(ListSheetName)
+    On Error GoTo 0
+    If listSheet Is Nothing Then
+        MsgBox "Could not find the '" & ListSheetName & "' sheet. Please run Step 1 first.", vbCritical: Exit Sub
+    End If
+    
+    ' --- Prepare the destination sheet ---
+    Set thisWB = ThisWorkbook
+    On Error Resume Next
+    ThisWorkbook.Sheets("Combined_Data").Delete
+    On Error GoTo 0
+    Set destSheet = thisWB.Sheets.Add(After:=thisWB.Sheets(thisWB.Sheets.Count))
+    destSheet.Name = "Combined_Data"
+    
+    ' --- Loop through the list and combine files marked "Yes" ---
+    lastRow = listSheet.Cells(listSheet.Rows.Count, "A").End(xlUp).Row
+    headerCopied = False
+    filesCombinedCount = 0
+    
+    For i = 2 To lastRow
+        If LCase(listSheet.Cells(i, "C").Value) = "yes" Then
+            fullPath = listSheet.Cells(i, "A").Value & "\" & listSheet.Cells(i, "B").Value
+            
+            Set sourceWB = Workbooks.Open(fullPath, ReadOnly:=True)
+            Set sourceSheet = sourceWB.Sheets(1)
+            
+            ' =========================================================================
+            ' --- START OF THE NEW, ROBUST LOGIC ---
+            ' =========================================================================
+            
+            ' STEP 1: Check if the source sheet contains any data at all.
+            ' CountA counts all non-empty cells. If it's 0, the sheet is blank.
+            If WorksheetFunction.CountA(sourceSheet.Cells) = 0 Then
+                ' This sheet is blank, so we do nothing and skip to the next file.
+            Else
+                ' The sheet is not blank, so we can proceed.
+                filesCombinedCount = filesCombinedCount + 1
+                
+                ' STEP 2: Reliably find the boundaries of the data.
+                lastUsedRow = sourceSheet.Cells.Find(What:="*", SearchOrder:=xlByRows, SearchDirection:=xlPrevious).Row
+                lastUsedCol = sourceSheet.Cells.Find(What:="*", SearchOrder:=xlByColumns, SearchDirection:=xlPrevious).Column
+                Set sourceDataRange = sourceSheet.Range("A1", sourceSheet.Cells(lastUsedRow, lastUsedCol))
+
+                ' STEP 3: Copy the data using the reliable range.
+                If headerCopied = False Then
+                    ' For the first file, copy the entire determined range.
+                    sourceDataRange.Copy destSheet.Range("A1")
+                    headerCopied = True
+                Else
+                    ' For all other files, check if there's more than a header row.
+                    If sourceDataRange.Rows.Count > 1 Then
+                        ' If yes, copy everything *except* the first row.
+                        sourceDataRange.Offset(1, 0).Resize(sourceDataRange.Rows.Count - 1).Copy destSheet.Cells(destSheet.Rows.Count, "A").End(xlUp).Row + 1
+                    End If
+                    ' If there was only one row, we do nothing to avoid copying the header again.
+                End If
+            End If
+            
+            ' =========================================================================
+            ' --- END OF THE NEW, ROBUST LOGIC ---
+            ' =========================================================================
+            
+            sourceWB.Close SaveChanges:=False
+        End If
+    Next i
+    
+    Application.ScreenUpdating = True
+    
+    If filesCombinedCount > 0 Then
+        destSheet.Columns.AutoFit
+        MsgBox "Success! " & filesCombinedCount & " selected files have been combined into the 'Combined_Data' sheet.", vbInformation
+    Else
+        destSheet.Delete
+        MsgBox "No files with data were marked with 'Yes' on the '" & ListSheetName & "' sheet. Nothing was combined.", vbExclamation
+    End If
+    
+End Sub
