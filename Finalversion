@@ -1,0 +1,195 @@
+' =========================================================================================
+' === FILE COMBINER TOOL - FINAL VERSION                                                ===
+' === This version intelligently matches columns by header name, making it very robust. ===
+' =========================================================================================
+
+' --- Macro for the FIRST button: "List All Files" (No changes needed here) ---
+Sub ListFilesInSubfolders()
+
+    Const HomeSheetName As String = "Home"
+    Const PathCell As String = "B1"
+    Const ListSheetName As String = "File_List"
+    
+    Dim mainFolderPath As String
+    Dim fso As Object
+    Dim mainFolder As Object, subFolder As Object, fileItem As Object
+    Dim listSheet As Worksheet
+    Dim homeSheet As Worksheet
+    Dim currentRow As Long
+    
+    Application.ScreenUpdating = False
+    
+    On Error Resume Next
+    Set homeSheet = ThisWorkbook.Sheets(HomeSheetName)
+    On Error GoTo 0
+    If homeSheet Is Nothing Then
+        MsgBox "Error: A sheet named '" & HomeSheetName & "' was not found.", vbCritical: Exit Sub
+    End If
+    
+    mainFolderPath = homeSheet.Range(PathCell).Value
+    If mainFolderPath = "" Then
+        MsgBox "Please enter the Main Folder Path in cell " & PathCell & ".", vbExclamation: Exit Sub
+    End If
+    
+    Set fso = CreateObject("Scripting.FileSystemObject")
+    If Not fso.FolderExists(mainFolderPath) Then
+        MsgBox "The folder path you provided does not exist. Please check it.", vbCritical: Exit Sub
+    End If
+    
+    On Error Resume Next
+    ThisWorkbook.Sheets(ListSheetName).Delete
+    On Error GoTo 0
+    
+    Set listSheet = ThisWorkbook.Sheets.Add(After:=homeSheet)
+    listSheet.Name = ListSheetName
+    
+    With listSheet
+        .Range("A1").Value = "Subfolder Path"
+        .Range("B1").Value = "Filename"
+        .Range("C1").Value = "Combine this file? (Select Yes/No)"
+        .Range("A1:C1").Font.Bold = True
+    End With
+    
+    currentRow = 2
+    Set mainFolder = fso.GetFolder(mainFolderPath)
+    For Each subFolder In mainFolder.SubFolders
+        For Each fileItem In subFolder.Files
+            If LCase(fileItem.Name) Like "*.xls*" Then
+                listSheet.Cells(currentRow, "A").Value = subFolder.Path
+                listSheet.Cells(currentRow, "B").Value = fileItem.Name
+                currentRow = currentRow + 1
+            End If
+        Next fileItem
+    Next subFolder
+    
+    If currentRow > 2 Then
+        With listSheet.Range("C2:C" & currentRow - 1).Validation
+            .Delete
+            .Add Type:=xlValidateList, AlertStyle:=xlValidAlertStop, Operator:=xlBetween, Formula1:="Yes,No"
+            .InCellDropdown = True
+        End With
+    End If
+    
+    listSheet.Columns("A:C").AutoFit
+    Application.ScreenUpdating = True
+    
+    If currentRow = 2 Then
+         MsgBox "No Excel files were found in any of the subfolders.", vbInformation
+    Else
+         MsgBox "File list has been created. Please go to the '" & ListSheetName & "' sheet and select 'Yes' for the files you want to combine.", vbInformation
+    End If
+    listSheet.Activate
+End Sub
+
+
+' --- Macro for the SECOND button: "Combine Selected Files" (This is the completely new, smart version) ---
+Sub CombineSelectedFiles_Smart()
+
+    Const ListSheetName As String = "File_List"
+    
+    Dim listSheet As Worksheet, destSheet As Worksheet
+    Dim lastRow As Long, i As Long, filesCombinedCount As Long
+    Dim sourceWB As Workbook, thisWB As Workbook
+    Dim sourceSheet As Worksheet
+    Dim headerMap As Object ' This will be our "smart" dictionary to map headers
+    Dim headerCopied As Boolean
+    
+    Application.ScreenUpdating = False
+    
+    On Error Resume Next
+    Set listSheet = ThisWorkbook.Sheets(ListSheetName)
+    On Error GoTo 0
+    If listSheet Is Nothing Then
+        MsgBox "Could not find the '" & ListSheetName & "' sheet. Please run Step 1 first.", vbCritical: Exit Sub
+    End If
+    
+    Set thisWB = ThisWorkbook
+    On Error Resume Next
+    thisWB.Sheets("Combined_Data").Delete
+    On Error GoTo 0
+    Set destSheet = thisWB.Sheets.Add(After:=thisWB.Sheets(thisWB.Sheets.Count))
+    destSheet.Name = "Combined_Data"
+    
+    Set headerMap = CreateObject("Scripting.Dictionary")
+    headerMap.CompareMode = vbTextCompare ' Makes header matching case-insensitive
+    headerCopied = False
+    filesCombinedCount = 0
+    
+    lastRow = listSheet.Cells(listSheet.Rows.Count, "A").End(xlUp).Row
+    
+    For i = 2 To lastRow
+        If LCase(listSheet.Cells(i, "C").Value) = "yes" Then
+            Dim fullPath As String
+            fullPath = listSheet.Cells(i, "A").Value & "\" & listSheet.Cells(i, "B").Value
+            
+            Set sourceWB = Workbooks.Open(fullPath, ReadOnly:=True)
+            Set sourceSheet = sourceWB.Sheets(1)
+            
+            ' Skip this file if its main sheet is blank
+            If WorksheetFunction.CountA(sourceSheet.Cells) = 0 Then
+                sourceWB.Close False
+                GoTo NextFile
+            End If
+            
+            filesCombinedCount = filesCombinedCount + 1
+            
+            If headerCopied = False Then
+                ' --- THIS IS THE FIRST FILE: It sets the master structure ---
+                sourceSheet.UsedRange.Copy destSheet.Range("A1")
+                ' Now, we build our map of headers to column numbers
+                Dim c As Long
+                For c = 1 To destSheet.UsedRange.Columns.Count
+                    headerMap.Add Key:=Trim(destSheet.Cells(1, c).Value), Item:=c
+                Next c
+                headerCopied = True
+            Else
+                ' --- THIS IS FOR ALL OTHER FILES: We use the map to place data correctly ---
+                Dim sourceLastRow As Long, sourceLastCol As Long
+                Dim destLastRow As Long, destCol As Long
+                Dim sourceCol As Long
+                
+                sourceLastRow = sourceSheet.Cells.Find("*", SearchOrder:=xlByRows, SearchDirection:=xlPrevious).Row
+                sourceLastCol = sourceSheet.Cells.Find("*", SearchOrder:=xlByColumns, SearchDirection:=xlPrevious).Column
+                
+                ' Loop through each column in the SOURCE file
+                For sourceCol = 1 To sourceLastCol
+                    Dim sourceHeader As String
+                    sourceHeader = Trim(sourceSheet.Cells(1, sourceCol).Value)
+                    
+                    If sourceHeader <> "" Then
+                        If headerMap.Exists(sourceHeader) Then
+                            ' This header already exists in our destination sheet
+                            destCol = headerMap(sourceHeader)
+                        Else
+                            ' This is a NEW header we haven't seen before. Add it to the destination.
+                            destCol = headerMap.Count + 1
+                            destSheet.Cells(1, destCol).Value = sourceHeader
+                            headerMap.Add Key:=sourceHeader, Item:=destCol ' Update our map
+                        End If
+                        
+                        ' Now, copy the data from source column to the correct destination column
+                        If sourceLastRow > 1 Then
+                           destLastRow = destSheet.Cells(destSheet.Rows.Count, destCol).End(xlUp).Row + 1
+                           sourceSheet.Range(sourceSheet.Cells(2, sourceCol), sourceSheet.Cells(sourceLastRow, sourceCol)).Copy _
+                                destSheet.Cells(destLastRow, destCol)
+                        End If
+                    End If
+                Next sourceCol
+            End If
+            
+            sourceWB.Close SaveChanges:=False
+        End If
+NextFile:
+    Next i
+    
+    Application.ScreenUpdating = True
+    
+    If filesCombinedCount > 0 Then
+        destSheet.Columns.AutoFit
+        MsgBox "Success! " & filesCombinedCount & " selected files have been intelligently combined into the 'Combined_Data' sheet. Columns were matched by name.", vbInformation
+    Else
+        destSheet.Delete
+        MsgBox "No files were marked with 'Yes' or no files with data were found. Nothing was combined.", vbExclamation
+    End If
+    
+End Sub
