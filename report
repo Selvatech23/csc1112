@@ -12,14 +12,12 @@ Private Sub cmdReport_Click()
     reportPath = "F:\selva\CDD-NWM\Macro\"
     reportDate = Date - 1
 
-    ' **CRITICAL CHECK 1: Database Path**
     If Dir(dbPath) = "" Then
         MsgBox "Error: Database file not found." & vbCrLf & _
                "Please check this path is correct:" & vbCrLf & dbPath, vbCritical, "File Not Found"
         Exit Sub
     End If
 
-    ' **CRITICAL CHECK 2: Report Folder Path**
     If Dir(reportPath, vbDirectory) = "" Then
         MsgBox "Error: The folder to save the report in does not exist." & vbCrLf & _
                "Please check this folder path is correct:" & vbCrLf & reportPath, vbCritical, "Folder Not Found"
@@ -29,15 +27,12 @@ Private Sub cmdReport_Click()
     ' --- 2. FETCH DATA FROM ACCESS ---
     Set conn = CreateObject("ADODB.Connection")
     conn.Open "Provider=Microsoft.ACE.OLEDB.12.0;Data Source=" & dbPath
-
     Set rs = conn.Execute("SELECT * FROM CompanyRecords WHERE SubmissionDate <= #" & Format(reportDate, "mm/dd/yyyy") & "#")
 
     If rs.EOF Then
         MsgBox "No data available for the report period (up to " & Format(reportDate, "dd-mmm-yyyy") & ").", vbInformation
-        rs.Close
-        conn.Close
-        Set rs = Nothing
-        Set conn = Nothing
+        rs.Close: conn.Close
+        Set rs = Nothing: Set conn = Nothing
         Exit Sub
     End If
 
@@ -48,48 +43,48 @@ Private Sub cmdReport_Click()
     Set xlSheet1 = xlBook.Sheets(1)
     xlSheet1.Name = "RawData"
 
-    ' Headers
     Dim i As Long
     For i = 0 To rs.Fields.Count - 1
         xlSheet1.Cells(1, i + 1).Value = rs.Fields(i).Name
     Next i
     
-    ' Data
     xlSheet1.Cells(2, 1).CopyFromRecordset rs
-    rs.Close
-    conn.Close
+    rs.Close: conn.Close
     
     ' --- 4. FORMATTING AND PIVOT TABLE ---
     Dim lastRow As Long
     lastRow = xlSheet1.Cells(xlSheet1.Rows.Count, "A").End(-4162).Row ' xlUp
 
-    ' Highlight rows
     For i = 2 To lastRow
-        If xlSheet1.Cells(i, 6).Value = False Then ' Assumes RegisteredInIndia is Column F (the 6th column)
-            xlSheet1.Range("A" & i).EntireRow.Interior.Color = RGB(255, 165, 0) ' Orange
+        If xlSheet1.Cells(i, 6).Value = False Then
+            xlSheet1.Range("A" & i).EntireRow.Interior.Color = RGB(255, 165, 0)
         End If
     Next i
     xlSheet1.Columns.AutoFit
 
-    ' Create Pivot Table
-    Dim pCache As Object, pTable As Object
+    ' --- THIS IS THE CORRECTED PIVOT TABLE BLOCK ---
+    Dim pCache As Object, pTable As Object, pf As Object
     Set xlSheet2 = xlBook.Sheets.Add(After:=xlSheet1)
     xlSheet2.Name = "PivotReport"
+    
     Set pCache = xlBook.PivotCaches.Create(SourceType:=1, SourceData:=xlSheet1.Range("A1").CurrentRegion)
     Set pTable = pCache.CreatePivotTable(TableDestination:=xlSheet2.Range("A3"), TableName:="CompanyPivot")
-    
-    With pTable
-        .PivotFields("Location").Orientation = 1 ' xlRowField
-        .PivotFields("CRNNumber").Orientation = 4 ' xlDataField
-        .PivotFields("CRNNumber").Function = -4112 ' xlCount
-        .PivotFields("Count of CRNNumber").Name = "Count of Companies"
-    End With
+
+    ' Add Location to Rows
+    pTable.PivotFields("Location").Orientation = 1 ' xlRowField
+
+    ' Add CRNNumber to the Data area and then modify its properties
+    Set pf = pTable.AddDataField(pTable.PivotFields("CRNNumber"), "Count of Companies", -4112) ' -4112 is xlCount
+    ' The line above adds the field, sets the custom name, and sets the function all in one go.
+    ' This is the most reliable method.
+
+    ' --- END OF CORRECTED BLOCK ---
 
     ' --- 5. SAVE THE REPORT ---
     fileName = reportPath & "Companyreport_" & Format(reportDate, "dd-mmm-yyyy") & ".xlsx"
-    If Dir(fileName) <> "" Then Kill fileName ' Delete old file if it exists
+    If Dir(fileName) <> "" Then Kill fileName
     
-    xlBook.SaveAs fileName, 51 ' 51 = xlOpenXMLWorkbook (xlsx)
+    xlBook.SaveAs fileName, 51
 
     ' --- 6. SEND EMAIL ---
     Set outlookApp = CreateObject("Outlook.Application")
@@ -103,13 +98,13 @@ Private Sub cmdReport_Click()
                 "Please find the company registration details for the close of business date " & Format(reportDate, "dd-mmm-yyyy") & "." & vbCrLf & vbCrLf & _
                 "Thanks and Regards," & vbCrLf & "ABC Support Team"
         .Attachments.Add fileName
-        .Display ' Use .Send to send automatically
+        .Display
     End With
 
     MsgBox "Report generated and email is ready to be sent!", vbInformation
 
 Cleanup:
-    On Error Resume Next ' Ignore errors during cleanup
+    On Error Resume Next
     If Not rs Is Nothing Then If rs.State = 1 Then rs.Close
     If Not conn Is Nothing Then If conn.State = 1 Then conn.Close
     If Not xlBook Is Nothing Then xlBook.Close False
