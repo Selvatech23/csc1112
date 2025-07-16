@@ -1,42 +1,36 @@
 Private Sub cmdReport_Click()
+    ' --- Special Diagnostic Version ---
+
     On Error GoTo GenericErrHandler
 
     Dim conn As Object, rs As Object
     Dim dbPath As String, reportPath As String, fileName As String
     Dim reportDate As Date
     Dim xlApp As Object, xlBook As Object, xlSheet1 As Object, xlSheet2 As Object
-    Dim outlookApp As Object, mailItem As Object
     
-    ' --- 1. SETUP AND PATH VALIDATION ---
+    ' --- 1. SETUP ---
     dbPath = "F:\selva\CDD-NWM\Macro\CompanyData.accdb"
-    reportPath = "F:\selva\CDD-NWM\Macro\"
+    ' Using Desktop for testing
+    reportPath = CreateObject("WScript.Shell").SpecialFolders("Desktop") & "\"
     reportDate = Date - 1
 
     If Dir(dbPath) = "" Then
-        MsgBox "Error: Database file not found." & vbCrLf & _
-               "Please check this path is correct:" & vbCrLf & dbPath, vbCritical, "File Not Found"
+        MsgBox "Error: Database file not found at:" & vbCrLf & dbPath, vbCritical, "File Not Found"
         Exit Sub
     End If
 
-    If Dir(reportPath, vbDirectory) = "" Then
-        MsgBox "Error: The folder to save the report in does not exist." & vbCrLf & _
-               "Please check this folder path is correct:" & vbCrLf & reportPath, vbCritical, "Folder Not Found"
-        Exit Sub
-    End If
-
-    ' --- 2. FETCH DATA FROM ACCESS ---
+    ' --- 2. FETCH DATA ---
     Set conn = CreateObject("ADODB.Connection")
     conn.Open "Provider=Microsoft.ACE.OLEDB.12.0;Data Source=" & dbPath
     Set rs = conn.Execute("SELECT * FROM CompanyRecords WHERE SubmissionDate <= #" & Format(reportDate, "mm/dd/yyyy") & "#")
 
     If rs.EOF Then
-        MsgBox "No data available for the report period (up to " & Format(reportDate, "dd-mmm-yyyy") & ").", vbInformation
+        MsgBox "No data available for the report period.", vbInformation
         rs.Close: conn.Close
-        Set rs = Nothing: Set conn = Nothing
         Exit Sub
     End If
 
-    ' --- 3. CREATE AND POPULATE EXCEL ---
+    ' --- 3. CREATE EXCEL ---
     Set xlApp = CreateObject("Excel.Application")
     xlApp.Visible = False
     Set xlBook = xlApp.Workbooks.Add
@@ -51,62 +45,43 @@ Private Sub cmdReport_Click()
     xlSheet1.Cells(2, 1).CopyFromRecordset rs
     rs.Close: conn.Close
     
-    ' --- 4. FORMATTING AND PIVOT TABLE ---
-    Dim lastRow As Long
-    lastRow = xlSheet1.Cells(xlSheet1.Rows.Count, "A").End(-4162).Row ' xlUp
-
-    For i = 2 To lastRow
-        If xlSheet1.Cells(i, 6).Value = False Then
-            xlSheet1.Range("A" & i).EntireRow.Interior.Color = RGB(255, 165, 0)
-        End If
-    Next i
+    ' --- 4. FORMATTING AND PIVOT ---
     xlSheet1.Columns.AutoFit
-
-    Dim pCache As Object, pTable As Object, pf As Object
+    Dim pCache As Object, pTable As Object
     Set xlSheet2 = xlBook.Sheets.Add(After:=xlSheet1)
     xlSheet2.Name = "PivotReport"
-    
     Set pCache = xlBook.PivotCaches.Create(SourceType:=1, SourceData:=xlSheet1.Range("A1").CurrentRegion)
     Set pTable = pCache.CreatePivotTable(TableDestination:=xlSheet2.Range("A3"), TableName:="CompanyPivot")
-
     pTable.PivotFields("Location").Orientation = 1
-    Set pf = pTable.AddDataField(pTable.PivotFields("CRNNumber"), "Count of Companies", -4112)
+    pTable.AddDataField pTable.PivotFields("CRNNumber"), "Count of Companies", -4112
 
-    ' --- 5. SAVE THE REPORT (WITH VERIFICATION) ---
+    ' --- 5. SAVE THE REPORT (WITH SPECIAL ERROR HANDLING) ---
     fileName = reportPath & "Companyreport_" & Format(reportDate, "dd-mmm-yyyy") & ".xlsx"
     
-    ' Suppress errors here in case the file doesn't exist to be killed
     On Error Resume Next
-    Kill fileName
-    ' Turn error handling back on immediately
-    On Error GoTo GenericErrHandler
-    
-    xlBook.SaveAs fileName, 51
+    Kill fileName ' Try to delete old file, ignore error if it doesn't exist
+    On Error GoTo 0 ' Reset normal error handling
 
-    ' *** CRITICAL VERIFICATION STEP ***
+    ' *** SPECIAL DIAGNOSTIC BLOCK STARTS HERE ***
+    On Error GoTo SaveAsErrHandler ' Set a trap for the save error
+    
+    xlBook.SaveAs fileName, 51 ' This is the line we expect to fail
+    
+    On Error GoTo GenericErrHandler ' Reset the error handler back to normal
+    ' *** DIAGNOSTIC BLOCK ENDS HERE ***
+
+    ' If the code reaches here, the save was successful. We can now proceed.
+    ' We still check with Dir() just in case of a strange, non-error failure.
     If Dir(fileName) = "" Then
-        MsgBox "Error: Failed to save the report." & vbCrLf & _
-               "Please check you have permissions to write to this folder:" & vbCrLf & reportPath, vbCritical, "Save Operation Failed"
+        MsgBox "Save failed for an unknown reason. Please contact IT.", vbCritical
         GoTo Cleanup
     End If
-    ' *** END OF VERIFICATION ***
-
+    
     ' --- 6. SEND EMAIL ---
-    Set outlookApp = CreateObject("Outlook.Application")
-    Set mailItem = outlookApp.CreateItem(0)
+    ' Code to send email is omitted for this test to focus on the save issue.
+    ' If the save works, we can add it back.
 
-    With mailItem
-        .To = "rsbdb@rbos.co.uk"
-        .CC = "rsbdb@rbos.co.uk"
-        .Subject = "Company Registration Details " & Format(reportDate, "dd-mmm-yyyy")
-        .Body = "Hi Team," & vbCrLf & vbCrLf & _
-                "Please find the company registration details for the close of business date " & Format(reportDate, "dd-mmm-yyyy") & "." & vbCrLf & vbCrLf & _
-                "Thanks and Regards," & vbCrLf & "ABC Support Team"
-        .Attachments.Add fileName
-        .Display
-    End With
-
-    MsgBox "Report generated and email is ready to be sent!", vbInformation
+    MsgBox "SUCCESS! The report was saved to your Desktop:" & vbCrLf & fileName, vbInformation
 
 Cleanup:
     On Error Resume Next
@@ -115,13 +90,23 @@ Cleanup:
     If Not xlBook Is Nothing Then xlBook.Close False
     If Not xlApp Is Nothing Then xlApp.Quit
     Set rs = Nothing: Set conn = Nothing
-    Set xlSheet1 = Nothing: Set xlSheet2 = Nothing
     Set xlBook = Nothing: Set xlApp = Nothing
-    Set mailItem = Nothing: Set outlookApp = Nothing
     Exit Sub
 
+' --- THIS IS THE NEW, SPECIAL ERROR HANDLER FOR THE SAVE OPERATION ---
+SaveAsErrHandler:
+    MsgBox "The code failed at the 'SaveAs' step." & vbCrLf & vbCrLf & _
+           "This is the REAL error from the system:" & vbCrLf & _
+           "--------------------------------------------------" & vbCrLf & _
+           "Error Number: " & Err.Number & vbCrLf & _
+           "Description: " & Err.Description & vbCrLf & _
+           "--------------------------------------------------" & vbCrLf & vbCrLf & _
+           "Please show this error to your IT support. It is likely caused by 'Controlled Folder Access' or Antivirus software.", _
+           vbCritical, "File Save Blocked by System"
+    Resume Cleanup
+
 GenericErrHandler:
-    MsgBox "An unexpected error occurred." & vbCrLf & _
+    MsgBox "An unexpected generic error occurred." & vbCrLf & _
            "Error Number: " & Err.Number & vbCrLf & _
            "Description: " & Err.Description, vbCritical, "Runtime Error"
     Resume Cleanup
