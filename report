@@ -1,0 +1,148 @@
+Private Sub cmdReport_Click()
+    On Error GoTo ErrHandler
+
+    Dim conn As Object, rs As Object
+    Dim dbPath As String, reportDate As Date
+    Dim xlApp As Object, xlBook As Object, xlSheet1 As Object, xlSheet2 As Object
+    Dim fileName As String
+    Dim i As Long, j As Long
+    Dim outlookApp As Object, mailItem As Object
+    Dim lastRow As Long
+    Dim pCache As Object 'PivotCache
+    Dim pTable As Object 'PivotTable
+
+    ' --- 1. SETUP ---
+    reportDate = Date - 1
+    dbPath = "F:\selva\CDD-NWM\Macro\CompanyData.accdb"
+    
+    ' Check if the database file exists
+    If Dir(dbPath) = "" Then
+        MsgBox "Database file not found at " & dbPath, vbCritical
+        Exit Sub
+    End If
+
+    ' --- 2. FETCH DATA FROM ACCESS ---
+    Set conn = CreateObject("ADODB.Connection")
+    conn.Open "Provider=Microsoft.ACE.OLEDB.12.0;Data Source=" & dbPath
+
+    ' Retrieve records up to yesterday's date
+    Set rs = conn.Execute("SELECT * FROM CompanyRecords WHERE SubmissionDate <= #" & Format(reportDate, "mm/dd/yyyy") & "#")
+
+    If rs.EOF Then
+        MsgBox "No data available for the report period (up to " & Format(reportDate, "dd-mmm-yyyy") & ").", vbInformation
+        rs.Close
+        conn.Close
+        Set rs = Nothing
+        Set conn = Nothing
+        Exit Sub
+    End If
+
+    ' --- 3. CREATE AND POPULATE EXCEL WORKBOOK ---
+    Set xlApp = CreateObject("Excel.Application")
+    xlApp.Visible = False ' Keep Excel hidden
+    Set xlBook = xlApp.Workbooks.Add
+    Set xlSheet1 = xlBook.Sheets(1)
+    xlSheet1.Name = "RawData"
+
+    ' Write headers
+    For i = 0 To rs.Fields.Count - 1
+        xlSheet1.Cells(1, i + 1).Value = rs.Fields(i).Name
+    Next i
+
+    ' Write data from recordset to Excel
+    xlSheet1.Cells(2, 1).CopyFromRecordset rs
+    rs.Close ' Close recordset after use
+
+    ' --- 4. FORMATTING AND PIVOT TABLE CREATION ---
+    lastRow = xlSheet1.Cells(xlSheet1.Rows.Count, "A").End(-4162).Row ' xlUp
+
+    ' Highlight rows where the company is not registered in India
+    For i = 2 To lastRow
+        ' Assuming 'RegisteredInIndia' is the 6th column (F)
+        If xlSheet1.Cells(i, 6).Value = False Then
+            xlSheet1.Range("A" & i & ":" & xlSheet1.Cells(i, rs.Fields.Count).Address).Interior.Color = RGB(255, 165, 0) ' Orange
+        End If
+    Next i
+    
+    xlSheet1.Columns.AutoFit
+
+    ' Create Pivot Table Sheet
+    Set xlSheet2 = xlBook.Sheets.Add(After:=xlSheet1)
+    xlSheet2.Name = "PivotReport"
+
+    ' Define Data Range for Pivot Table
+    Dim dataRange As Object
+    Set dataRange = xlSheet1.Range("A1").CurrentRegion
+
+    ' Create Pivot Cache and then the Pivot Table (more reliable method)
+    Set pCache = xlBook.PivotCaches.Create(SourceType:=1, SourceData:=dataRange, Version:=6) ' 1 = xlDatabase, 6=xlPivotTableVersion15
+    Set pTable = pCache.CreatePivotTable(TableDestination:=xlSheet2.Range("A3"), TableName:="CompanyPivot")
+
+    ' Configure Pivot Table Fields
+    With pTable
+        ' Add Location to Rows
+        With .PivotFields("Location")
+            .Orientation = 1 ' xlRowField
+            .Position = 1
+        End With
+        
+        ' Add CRNNumber to Values for counting
+        With .PivotFields("CRNNumber")
+            .Orientation = 4 ' xlDataField
+            .Function = -4112 ' xlCount
+            .Name = "Count of Companies"
+        End With
+    End With
+
+    ' --- 5. SAVE THE REPORT ---
+    Dim reportPath As String
+    reportPath = "F:\selva\CDD-NWM\Macro\"
+    
+    If Dir(reportPath, vbDirectory) = "" Then
+        MsgBox "Report folder path does not exist: " & reportPath, vbCritical
+        GoTo Cleanup
+    End If
+
+    fileName = reportPath & "Companyreport_" & Format(reportDate, "dd-mmm-yyyy") & ".xlsx"
+
+    ' Delete existing file to prevent error
+    If Dir(fileName) <> "" Then Kill fileName
+    
+    xlBook.SaveAs fileName, 51 ' 51 = xlOpenXMLWorkbook (xlsx)
+
+    ' --- 6. SEND EMAIL ---
+    Set outlookApp = CreateObject("Outlook.Application")
+    Set mailItem = outlookApp.CreateItem(0)
+
+    With mailItem
+        .To = "rsbdb@rbos.co.uk"
+        .CC = "rsbdb@rbos.co.uk"
+        .Subject = "Company Registration Details " & Format(reportDate, "dd-mmm-yyyy")
+        .Body = "Hi Team," & vbCrLf & vbCrLf & _
+                "Please find the company registration details for the close of business date " & Format(reportDate, "dd-mmm-yyyy") & "." & vbCrLf & vbCrLf & _
+                "Thanks and Regards," & vbCrLf & "ABC Support Team"
+        .Attachments.Add fileName
+        .Display ' Use .Display to review before sending. Change to .Send to send automatically.
+    End With
+
+    MsgBox "Report generated and email is ready to be sent!", vbInformation
+
+Cleanup:
+    If Not rs Is Nothing Then If rs.State = 1 Then rs.Close
+    If Not conn Is Nothing Then If conn.State = 1 Then conn.Close
+    If Not xlBook Is Nothing Then xlBook.Close False ' Close without saving changes
+    If Not xlApp Is Nothing Then xlApp.Quit
+    Set rs = Nothing
+    Set conn = Nothing
+    Set xlSheet1 = Nothing
+    Set xlSheet2 = Nothing
+    Set xlBook = Nothing
+    Set xlApp = Nothing
+    Set mailItem = Nothing
+    Set outlookApp = Nothing
+    Exit Sub
+
+ErrHandler:
+    MsgBox "An error occurred in the report generation process." & vbCrLf & "Error: " & Err.Description, vbCritical
+    Resume Cleanup
+End Sub
