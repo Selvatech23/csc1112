@@ -62,7 +62,6 @@ Private Sub cmdReport_Click()
     Next i
     xlSheet1.Columns.AutoFit
 
-    ' --- THIS IS THE CORRECTED PIVOT TABLE BLOCK ---
     Dim pCache As Object, pTable As Object, pf As Object
     Set xlSheet2 = xlBook.Sheets.Add(After:=xlSheet1)
     xlSheet2.Name = "PivotReport"
@@ -70,21 +69,27 @@ Private Sub cmdReport_Click()
     Set pCache = xlBook.PivotCaches.Create(SourceType:=1, SourceData:=xlSheet1.Range("A1").CurrentRegion)
     Set pTable = pCache.CreatePivotTable(TableDestination:=xlSheet2.Range("A3"), TableName:="CompanyPivot")
 
-    ' Add Location to Rows
-    pTable.PivotFields("Location").Orientation = 1 ' xlRowField
+    pTable.PivotFields("Location").Orientation = 1
+    Set pf = pTable.AddDataField(pTable.PivotFields("CRNNumber"), "Count of Companies", -4112)
 
-    ' Add CRNNumber to the Data area and then modify its properties
-    Set pf = pTable.AddDataField(pTable.PivotFields("CRNNumber"), "Count of Companies", -4112) ' -4112 is xlCount
-    ' The line above adds the field, sets the custom name, and sets the function all in one go.
-    ' This is the most reliable method.
-
-    ' --- END OF CORRECTED BLOCK ---
-
-    ' --- 5. SAVE THE REPORT ---
+    ' --- 5. SAVE THE REPORT (WITH VERIFICATION) ---
     fileName = reportPath & "Companyreport_" & Format(reportDate, "dd-mmm-yyyy") & ".xlsx"
-    If Dir(fileName) <> "" Then Kill fileName
+    
+    ' Suppress errors here in case the file doesn't exist to be killed
+    On Error Resume Next
+    Kill fileName
+    ' Turn error handling back on immediately
+    On Error GoTo GenericErrHandler
     
     xlBook.SaveAs fileName, 51
+
+    ' *** CRITICAL VERIFICATION STEP ***
+    If Dir(fileName) = "" Then
+        MsgBox "Error: Failed to save the report." & vbCrLf & _
+               "Please check you have permissions to write to this folder:" & vbCrLf & reportPath, vbCritical, "Save Operation Failed"
+        GoTo Cleanup
+    End If
+    ' *** END OF VERIFICATION ***
 
     ' --- 6. SEND EMAIL ---
     Set outlookApp = CreateObject("Outlook.Application")
