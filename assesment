@@ -1,0 +1,61 @@
+Steps:
+1. Create a user form with following Fields:
+a. Company CRN Number - Free text box (6 digit numeric only allowed)
+b. Company Name - Free text box
+c. No of Employees - Free text box (only Numeric)
+d. Company Industry – Should be in a dropdown, values contain ‘Agri, Mining, Information 
+Technology, Hotels and Restaurants, Construction, Education, Financial and insurance 
+activities, Manufacturing industry, Public administrative works.
+e. Company Location - Should be in a dropdown (India, UK, US, Germany, Japan)
+f. Is company registered in India? - Should be an option button – Yes or No
+g. Company Started Date - Free textbox date format should be DD-MMM-YYYY
+h. Is the company supporting CSR activity – it should be Check box, if check box ticked it is 
+Yes, otherwise it is No.
+2. In the user form need Insert, View, Update, Delete, Report & Clear Button.
+3. The data you are feeding should be stored in an MS Access database.
+4. Per day you can enter only 25 records, if you add 26
+th record the tool should prompt a message, 
+‘Today’s limit exceeded you have already stored 25 records” and it should not allow to store 
+further records.
+5. While inserting the records Proper validation required in all fields.
+6. While Inserting records please capture the RACF ID of the submitter and submission date in the 
+database.
+7. For Updating company details, please feed the company CRN number and click view button. The 
+companies’ relevant fields should be populated.
+8. Allow to edit existing values and click update button. The tool should change the updated fields 
+inside the database with RACF ID details and date.
+9. You need to feed CRN number you have used and click view button and delete the record from 
+database by clicking delete button.
+10. Before deletion there should be a prompt “Do you want to delete the company records under 
+the CRN number <<populate the CRN number>>? Yes or No option, if you press yes, the record 
+should be deleted, if you press No the record should not be deleted. (Try for 1 or 2 records)
+Report:
+1. Once you achieved all above 10 points you need do reporting activity.
+2. Please add Report button in the user form.
+3. Once you click Report button, from the database the records should be populated in an Excel.
+Information Classification - Restricted
+4. In the report, Sheet 1 contains all the records till Yesterday, e.g If you run the report on 15
+th July, 
+Until 14
+th July EOD records only should be visible in the sheet 1.
+5. Using Raw data in sheet 1 you need to create a pivot in sheet2 like Count of companies in each 
+location. 
+6. In sheet 1 using loop please highlight the companies which are not registered in India as orange
+colour. 
+7. Once done please save the report like file name “Companyreport_<<DD-MMM-YYYY>>.xlsx”
+8. It should be like if you run on 15
+th July the file name should be in previous day like 
+Companyreport_14-JUL-2025.xlsx
+Mailing:
+1. Once you saved the report as said in previous point 1 to 8. It should automatically connect 
+to outlook and attach the report and send to yourself and copy yourself.
+2. Mail To field – Your mail id
+3. Mail Cc filed – Your Mail id
+4. Mail Subject – ‘Company Registration Details << DD-MMM-YYYY>>” here the date should be 
+in previous day as mentioned in Report Point no 8.
+5. Attach the Report.
+6. Email Body should be –
+“Hi Team,
+Please find the company registration details for the close of business date << DD-MMMYYYY>>.
+Thanks and Regards,
+ABC Support Team.
