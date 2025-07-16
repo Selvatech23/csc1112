@@ -1,0 +1,39 @@
+2
+
+3
+
+A
+
+<title>
+
+Fenergo
+
+</title><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0">
+
+<link href="/Fenergo.RBS.Web/styles/bundle.css" rel="stylesheet" type="text/css">
+
+<link href="/Fenergo.RBS.Web/assets/images/favicon.ico" rel="icon" type="image/x-icon">
+
+<script type="text/javascript">
+
+window.SamlResponse = window.atob("),
+
+</script>
+
+<script src="/Fenergo.RBS.Web/errorPage.js"></script>
+
+<script src="/Fenergo.RBS. Web/shims/fenergo.js"></script>
+
+<script src="/Fenergo.RBS.Web/shims/fenergoUI.js"></script>
+
+<script src="/Fenergo.RBS.Web/shims/fenergo.config.js"></script>
+
+<script src="/Fenergo.RBS. Web/js/store.min.js"></script>
+
+<script type="text/javascript">
+
+if (window && window.FenergoConfig && window. FenergoConfig.enableExtensibility) {
+
+var extensionsStylesheet = document.createElement('link');
+
+extensionsStylesheet.setAttribute('href', '/Fenergo.RBS.Web/styles/extensionsBundle.css'),
