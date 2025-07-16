@@ -1,0 +1,372 @@
+Private Sub cmdInsert_Click()
+    Dim conn As Object, rs As Object
+    Dim dbPath As String, sql As String
+    Dim todayCount As Integer
+    Dim RACFID As String
+    Dim submissionDate As Date
+    Dim CRNExists As Boolean
+
+    ' Validation
+    If Not IsNumeric(txtCRN.Value) Or Len(txtCRN.Value) <> 6 Then
+        MsgBox "CRN must be a 6-digit number.", vbExclamation
+        Exit Sub
+    End If
+    If txtCompanyName.Value = "" Or Not IsNumeric(txtEmployees.Value) Or _
+       cmbIndustry.Value = "" Or cmbLocation.Value = "" Or txtStartDate.Value = "" Then
+        MsgBox "Please fill all required fields correctly.", vbExclamation
+        Exit Sub
+    End If
+    If Not IsDate(txtStartDate.Value) Then
+        MsgBox "Start Date must be in DD-MMM-YYYY format.", vbExclamation
+        Exit Sub
+    End If
+
+    ' Setup
+    dbPath = "F:\selva\CDD-NWM\Macro\CompanyData.accdb"
+    Set conn = CreateObject("ADODB.Connection")
+    conn.Open "Provider=Microsoft.ACE.OLEDB.12.0;Data Source=" & dbPath
+
+    ' Check daily limit
+    submissionDate = Date
+    Set rs = conn.Execute("SELECT COUNT(*) FROM CompanyRecords WHERE SubmissionDate = #" & submissionDate & "#")
+    todayCount = rs.Fields(0).Value
+    If todayCount >= 25 Then
+        MsgBox "Today's limit exceeded. You have already stored 25 records.", vbCritical
+        conn.Close: Set conn = Nothing
+        Exit Sub
+    End If
+
+    ' Check for duplicate CRN
+    Set rs = conn.Execute("SELECT * FROM CompanyRecords WHERE CRNNumber = '" & txtCRN.Value & "'")
+    If Not rs.EOF Then
+        MsgBox "CRN already exists. Please use a unique CRN.", vbExclamation
+        conn.Close: Set conn = Nothing
+        Exit Sub
+    End If
+
+    ' Insert record
+    RACFID = Environ("Username")
+    sql = "INSERT INTO CompanyRecords (CRNNumber, CompanyName, NoOfEmployees, Industry, Location, RegisteredInIndia, StartDate, CSRSupport, SubmittedBy, SubmissionDate) " & _
+          "VALUES ('" & txtCRN.Value & "', '" & txtCompanyName.Value & "', " & txtEmployees.Value & ", '" & cmbIndustry.Value & "', '" & cmbLocation.Value & "', " & _
+          IIf(optYes.Value, True, False) & ", #" & Format(CDate(txtStartDate.Value), "mm/dd/yyyy") & "#, " & chkCSR.Value & ", '" & RACFID & "', #" & Format(submissionDate, "mm/dd/yyyy") & "#)"
+
+    conn.Execute sql
+    MsgBox "Record inserted successfully!", vbInformation
+
+    conn.Close: Set conn = Nothing
+End Sub
+
+
+Private Sub cmdView_Click()
+    Dim conn As Object, rs As Object
+    Dim dbPath As String
+
+    If txtCRN.Value = "" Then MsgBox "Enter CRN to view record.": Exit Sub
+
+    dbPath = "F:\selva\CDD-NWM\Macro\CompanyData.accdb"
+    Set conn = CreateObject("ADODB.Connection")
+    conn.Open "Provider=Microsoft.ACE.OLEDB.12.0;Data Source=" & dbPath
+
+    Set rs = conn.Execute("SELECT * FROM CompanyRecords WHERE CRNNumber = '" & txtCRN.Value & "'")
+    If Not rs.EOF Then
+        txtCompanyName.Value = rs("CompanyName")
+        txtEmployees.Value = rs("NoOfEmployees")
+        cmbIndustry.Value = rs("Industry")
+        cmbLocation.Value = rs("Location")
+        txtStartDate.Value = Format(rs("StartDate"), "dd-mmm-yyyy")
+        chkCSR.Value = rs("CSRSupport")
+        If rs("RegisteredInIndia") = True Then
+            optYes.Value = True
+        Else
+            optNo.Value = True
+        End If
+    Else
+        MsgBox "No record found for this CRN.", vbExclamation
+    End If
+    conn.Close: Set conn = Nothing
+End Sub
+Private Sub cmdUpdate_Click()
+    On Error GoTo ErrHandler
+
+    Dim conn As Object
+    Dim dbPath As String, sql As String
+    Dim RACFID As String
+    Dim registeredInIndia As Boolean
+
+    ' Validate required fields
+    If Trim(txtCRN.Value) = "" Then
+        MsgBox "Enter CRN to update.", vbExclamation
+        Exit Sub
+    End If
+
+    If Trim(txtCompanyName.Value) = "" Or _
+       Trim(txtEmployees.Value) = "" Or _
+       IsNull(cmbIndustry.Value) Or _
+       IsNull(cmbLocation.Value) Or _
+       Trim(txtStartDate.Value) = "" Then
+        MsgBox "Please fill in all required fields.", vbExclamation
+        Exit Sub
+    End If
+
+    ' Prepare values
+    RACFID = Environ("Username")
+    registeredInIndia = optYes.Value
+
+    ' Open connection
+    dbPath = "F:\selva\CDD-NWM\Macro\CompanyData.accdb"
+    Set conn = CreateObject("ADODB.Connection")
+    conn.Open "Provider=Microsoft.ACE.OLEDB.12.0;Data Source=" & dbPath
+
+    ' Build SQL safely
+    sql = "UPDATE CompanyRecords SET " & _
+          "CompanyName = '" & Replace(txtCompanyName.Value, "'", "''") & "', " & _
+          "NoOfEmployees = " & Val(txtEmployees.Value) & ", " & _
+          "Industry = '" & Replace(cmbIndustry.Value, "'", "''") & "', " & _
+          "Location = '" & Replace(cmbLocation.Value, "'", "''") & "', " & _
+          "RegisteredInIndia = " & registeredInIndia & ", " & _
+          "StartDate = #" & Format(CDate(txtStartDate.Value), "mm/dd/yyyy") & "#, " & _
+          "CSRSupport = " & chkCSR.Value & ", " & _
+          "LastUpdatedBy = '" & Replace(RACFID, "'", "''") & "', " & _
+          "LastUpdatedDate = #" & Format(Date, "mm/dd/yyyy") & "# " & _
+          "WHERE CRNNumber = '" & Replace(txtCRN.Value, "'", "''") & "'"
+
+    ' Execute update
+    conn.Execute sql
+    MsgBox "Record updated successfully!", vbInformation
+
+    ' Clean up
+    conn.Close
+    Set conn = Nothing
+    Exit Sub
+
+ErrHandler:
+    MsgBox "Error updating record: " & Err.Description, vbCritical
+    If Not conn Is Nothing Then
+        conn.Close
+        Set conn = Nothing
+    End If
+End Sub
+
+Private Sub cmdDelete_Click()
+    Dim conn As Object
+    Dim dbPath As String
+    Dim confirm As VbMsgBoxResult
+
+    ' Check if CRN is entered
+    If txtCRN.Value = "" Then
+        MsgBox "Please enter the CRN number to delete.", vbExclamation
+        Exit Sub
+    End If
+
+    ' Confirm deletion
+    confirm = MsgBox("Do you want to delete the company records under the CRN number " & txtCRN.Value & "?", vbYesNo + vbQuestion, "Confirm Deletion")
+    If confirm = vbNo Then Exit Sub
+
+    ' Connect to Access DB
+    dbPath = "F:\selva\CDD-NWM\Macro\CompanyData.accdb"
+    Set conn = CreateObject("ADODB.Connection")
+    conn.Open "Provider=Microsoft.ACE.OLEDB.12.0;Data Source=" & dbPath
+
+    ' Delete record
+    conn.Execute "DELETE FROM CompanyRecords WHERE CRNNumber = '" & txtCRN.Value & "'"
+    MsgBox "Record deleted successfully!", vbInformation
+
+    ' Clear form
+    Call cmdClear_Click
+
+    conn.Close
+    Set conn = Nothing
+End Sub
+Private Sub cmdClear_Click()
+    txtCRN.Value = ""
+    txtCompanyName.Value = ""
+    txtEmployees.Value = ""
+    txtStartDate.Value = ""
+    cmbIndustry.Value = ""
+    cmbLocation.Value = ""
+    optYes.Value = False
+    optNo.Value = False
+    chkCSR.Value = False
+End Sub
+Private Sub cmdReport_Click()
+    On Error GoTo ErrHandler
+
+    Dim conn As Object, rs As Object
+    Dim dbPath As String, reportDate As Date
+    Dim xlApp As Object, xlBook As Object, xlSheet1 As Object, xlSheet2 As Object
+    Dim fileName As String, i As Long, j As Long
+    Dim outlookApp As Object, mailItem As Object
+    Dim lastRow As Long, lastCol As Long
+    Dim dataRange As String
+
+    reportDate = Date - 1
+    dbPath = "F:\selva\CDD-NWM\Macro\CompanyData.accdb"
+
+    ' Connect to Access
+    Set conn = CreateObject("ADODB.Connection")
+    conn.Open "Provider=Microsoft.ACE.OLEDB.12.0;Data Source=" & dbPath
+
+    Set rs = conn.Execute("SELECT * FROM CompanyRecords WHERE SubmissionDate <= #" & Format(reportDate, "mm/dd/yyyy") & "#")
+
+    ' Create Excel
+    Set xlApp = CreateObject("Excel.Application")
+    xlApp.Visible = False
+    Set xlBook = xlApp.Workbooks.Add
+    Set xlSheet1 = xlBook.Sheets(1)
+    xlSheet1.Name = "RawData"
+
+    ' Write headers
+    For i = 0 To rs.Fields.Count - 1
+        xlSheet1.Cells(1, i + 1).Value = rs.Fields(i).Name
+    Next i
+
+    ' Write data
+    i = 2
+    Do While Not rs.EOF
+        For j = 0 To rs.Fields.Count - 1
+            xlSheet1.Cells(i, j + 1).Value = rs.Fields(j).Value
+        Next j
+
+        ' Highlight if not registered in India
+        If rs("RegisteredInIndia") = False Then
+            xlSheet1.Range(xlSheet1.Cells(i, 1), xlSheet1.Cells(i, rs.Fields.Count)).Interior.Color = RGB(255, 165, 0)
+        End If
+
+        rs.MoveNext
+        i = i + 1
+    Loop
+
+    ' Check if data exists
+    If i <= 2 Then
+        MsgBox "No data available to create pivot table.", vbExclamation
+        GoTo Cleanup
+    End If
+
+    ' Create Pivot Sheet
+    Set xlSheet2 = xlBook.Sheets.Add(After:=xlSheet1)
+    xlSheet2.Name = "PivotReport"
+    
+    
+    
+    ' Define data range as a Range object (not a string)
+    lastRow = xlSheet1.Cells(xlSheet1.Rows.Count, 1).End(xlUp).Row
+    lastCol = xlSheet1.Cells(1, xlSheet1.Columns.Count).End(xlToLeft).Column
+    Dim dataRangeObj As Object
+    Set dataRangeObj = xlSheet1.Range(xlSheet1.Cells(1, 1), xlSheet1.Cells(lastRow, lastCol))
+
+    ' Create Pivot Table
+    On Error Resume Next
+    xlBook.PivotTableWizard _
+    SourceType:=xlDatabase, _
+    SourceData:=dataRangeObj, _
+    TableDestination:=xlSheet2.Cells(1, 1), _
+    TableName:="CompanyPivot"
+
+
+        
+    
+    If Err.Number <> 0 Then
+        MsgBox "Pivot table creation failed: " & Err.Description, vbCritical
+        Err.Clear
+        GoTo Cleanup
+    End If
+    On Error GoTo ErrHandler
+
+    ' Configure Pivot Table
+    With xlSheet2.PivotTables("CompanyPivot")
+        .AddFields RowFields:="Location"
+        With .PivotFields("CRNNumber")
+            .Orientation = 4 ' xlDataField
+            .Function = -4112 ' xlCount
+        End With
+    End With
+
+    ' Save report
+    ' Check if workbook is saved
+    If ThisWorkbook.Path = "" Then
+    MsgBox "Please save this Excel file first before generating the report.", vbExclamation
+    Exit Sub
+    End If
+
+    ' Check if folder exists
+    If Dir("F:\selva\CDD-NWM\Macro\", vbDirectory) = "" Then
+    MsgBox "Folder path does not exist!", vbCritical
+    Exit Sub
+    End If
+
+    ' Construct file name
+    fileName = "F:\selva\CDD-NWM\Macro\Companyreport_" & Format(reportDate, "dd-mmm-yyyy") & ".xlsx"
+
+    ' Save the report
+    MsgBox "Saving report to: " & fileName
+    xlBook.SaveAs fileName
+
+    ' Confirm file was saved
+    If Dir(fileName) = "" Then
+    MsgBox "File was not saved successfully!", vbCritical
+    Exit Sub
+    End If
+
+
+
+    ' Send email
+    Set outlookApp = CreateObject("Outlook.Application")
+    Set mailItem = outlookApp.CreateItem(0)
+
+    With mailItem
+        .To = "rsbdb@rbos.co.uk"
+        .CC = "rsbdb@rbos.co.uk"
+        .Subject = "Company Registration Details " & Format(reportDate, "dd-mmm-yyyy")
+        .Body = "Hi Team," & vbCrLf & vbCrLf & _
+                "Please find the company registration details for the close of business date " & Format(reportDate, "dd-mmm-yyyy") & "." & vbCrLf & vbCrLf & _
+                "Thanks and Regards," & vbCrLf & "ABC Support Team"
+        .Attachments.Add fileName
+        .Send
+    End With
+
+    MsgBox "Report generated and emailed successfully!", vbInformation
+
+Cleanup:
+    If Not xlBook Is Nothing Then xlBook.Close False
+    If Not xlApp Is Nothing Then xlApp.Quit
+    Set xlSheet1 = Nothing
+    Set xlSheet2 = Nothing
+    Set xlBook = Nothing
+    Set xlApp = Nothing
+    Set rs = Nothing
+    Set conn = Nothing
+    Set mailItem = Nothing
+    Set outlookApp = Nothing
+    Exit Sub
+
+ErrHandler:
+    MsgBox "Error: " & Err.Description, vbCritical
+    Resume Cleanup
+End Sub
+
+
+
+Private Sub UserForm_Initialize()
+    ' Populate Industry dropdown
+    With cmbIndustry
+        .AddItem "Agri"
+        .AddItem "Mining"
+        .AddItem "Information Technology"
+        .AddItem "Hotels and Restaurants"
+        .AddItem "Construction"
+        .AddItem "Education"
+        .AddItem "Financial and insurance activities"
+        .AddItem "Manufacturing industry"
+        .AddItem "Public administrative works"
+    End With
+
+    ' Populate Location dropdown
+    With cmbLocation
+        .AddItem "India"
+        .AddItem "UK"
+        .AddItem "US"
+        .AddItem "Germany"
+        .AddItem "Japan"
+    End With
+End Sub
+
