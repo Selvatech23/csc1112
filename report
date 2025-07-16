@@ -1,113 +1,73 @@
 Private Sub cmdReport_Click()
-    ' --- Special Diagnostic Version ---
-
+    ' --- FINAL DIAGNOSTIC: Visible Excel and Simple Path ---
+    
+    Dim conn As Object, rs As Object, dbPath As String
+    Dim xlApp As Object, xlBook As Object, xlSheet1 As Object
+    Dim fileName As String
+    
     On Error GoTo GenericErrHandler
-
-    Dim conn As Object, rs As Object
-    Dim dbPath As String, reportPath As String, fileName As String
-    Dim reportDate As Date
-    Dim xlApp As Object, xlBook As Object, xlSheet1 As Object, xlSheet2 As Object
     
     ' --- 1. SETUP ---
     dbPath = "F:\selva\CDD-NWM\Macro\CompanyData.accdb"
-    ' Using Desktop for testing
-    reportPath = CreateObject("WScript.Shell").SpecialFolders("Desktop") & "\"
-    reportDate = Date - 1
-
-    If Dir(dbPath) = "" Then
-        MsgBox "Error: Database file not found at:" & vbCrLf & dbPath, vbCritical, "File Not Found"
+    fileName = "C:\Temp\CompanyReport_Test.xlsx" 'Saving to a simple, trusted path
+    
+    ' --- Check if C:\Temp exists ---
+    If Dir("C:\Temp", vbDirectory) = "" Then
+        MsgBox "Error: The folder C:\Temp was not found. Please create it manually and try again.", vbCritical
         Exit Sub
     End If
-
+    
+    MsgBox "This test will now try to save a file to: " & fileName
+    
     ' --- 2. FETCH DATA ---
     Set conn = CreateObject("ADODB.Connection")
     conn.Open "Provider=Microsoft.ACE.OLEDB.12.0;Data Source=" & dbPath
-    Set rs = conn.Execute("SELECT * FROM CompanyRecords WHERE SubmissionDate <= #" & Format(reportDate, "mm/dd/yyyy") & "#")
-
+    Set rs = conn.Execute("SELECT * FROM CompanyRecords")
+    
     If rs.EOF Then
-        MsgBox "No data available for the report period.", vbInformation
+        MsgBox "No data in the database to report on.", vbInformation
         rs.Close: conn.Close
         Exit Sub
     End If
-
-    ' --- 3. CREATE EXCEL ---
-    Set xlApp = CreateObject("Excel.Application")
-    xlApp.Visible = False
-    Set xlBook = xlApp.Workbooks.Add
+    
+    ' --- 3. CREATE VISIBLE EXCEL WORKBOOK ---
+    Set xlApp = ThisWorkbook.Application
+    Set xlBook = xlApp.Workbooks.Add ' You will see a new workbook appear
+    xlApp.Visible = True ' Ensure Excel is visible
     Set xlSheet1 = xlBook.Sheets(1)
-    xlSheet1.Name = "RawData"
-
+    
+    ' --- 4. POPULATE DATA ---
     Dim i As Long
     For i = 0 To rs.Fields.Count - 1
         xlSheet1.Cells(1, i + 1).Value = rs.Fields(i).Name
     Next i
-    
     xlSheet1.Cells(2, 1).CopyFromRecordset rs
     rs.Close: conn.Close
-    
-    ' --- 4. FORMATTING AND PIVOT ---
     xlSheet1.Columns.AutoFit
-    Dim pCache As Object, pTable As Object
-    Set xlSheet2 = xlBook.Sheets.Add(After:=xlSheet1)
-    xlSheet2.Name = "PivotReport"
-    Set pCache = xlBook.PivotCaches.Create(SourceType:=1, SourceData:=xlSheet1.Range("A1").CurrentRegion)
-    Set pTable = pCache.CreatePivotTable(TableDestination:=xlSheet2.Range("A3"), TableName:="CompanyPivot")
-    pTable.PivotFields("Location").Orientation = 1
-    pTable.AddDataField pTable.PivotFields("CRNNumber"), "Count of Companies", -4112
-
-    ' --- 5. SAVE THE REPORT (WITH SPECIAL ERROR HANDLING) ---
-    fileName = reportPath & "Companyreport_" & Format(reportDate, "dd-mmm-yyyy") & ".xlsx"
     
+    ' --- 5. ATTEMPT TO SAVE ---
     On Error Resume Next
-    Kill fileName ' Try to delete old file, ignore error if it doesn't exist
-    On Error GoTo 0 ' Reset normal error handling
-
-    ' *** SPECIAL DIAGNOSTIC BLOCK STARTS HERE ***
-    On Error GoTo SaveAsErrHandler ' Set a trap for the save error
+    Kill fileName
+    On Error GoTo GenericErrHandler
     
-    xlBook.SaveAs fileName, 51 ' This is the line we expect to fail
+    MsgBox "Data is populated. The code will now attempt to save the visible workbook.", vbInformation
     
-    On Error GoTo GenericErrHandler ' Reset the error handler back to normal
-    ' *** DIAGNOSTIC BLOCK ENDS HERE ***
-
-    ' If the code reaches here, the save was successful. We can now proceed.
-    ' We still check with Dir() just in case of a strange, non-error failure.
+    xlBook.SaveAs fileName, 51 ' Attempting to save the new, VISIBLE workbook
+    
+    MsgBox "The 'SaveAs' command has been executed.", vbInformation
+    
+    ' --- 6. FINAL VERIFICATION ---
     If Dir(fileName) = "" Then
-        MsgBox "Save failed for an unknown reason. Please contact IT.", vbCritical
-        GoTo Cleanup
+        MsgBox "CRITICAL FAILURE: The SaveAs command ran but the file was NOT created." & vbCrLf & _
+               "This confirms an external program (Antivirus/Security) is blocking the save." & vbCrLf & _
+               "Please show this message to your IT department.", vbCritical
+    Else
+        MsgBox "SUCCESS! The test file was created successfully at: " & fileName, vbInformation
+        xlBook.Close False ' Close the test book
     End If
-    
-    ' --- 6. SEND EMAIL ---
-    ' Code to send email is omitted for this test to focus on the save issue.
-    ' If the save works, we can add it back.
 
-    MsgBox "SUCCESS! The report was saved to your Desktop:" & vbCrLf & fileName, vbInformation
-
-Cleanup:
-    On Error Resume Next
-    If Not rs Is Nothing Then If rs.State = 1 Then rs.Close
-    If Not conn Is Nothing Then If conn.State = 1 Then conn.Close
-    If Not xlBook Is Nothing Then xlBook.Close False
-    If Not xlApp Is Nothing Then xlApp.Quit
-    Set rs = Nothing: Set conn = Nothing
-    Set xlBook = Nothing: Set xlApp = Nothing
-    Exit Sub
-
-' --- THIS IS THE NEW, SPECIAL ERROR HANDLER FOR THE SAVE OPERATION ---
-SaveAsErrHandler:
-    MsgBox "The code failed at the 'SaveAs' step." & vbCrLf & vbCrLf & _
-           "This is the REAL error from the system:" & vbCrLf & _
-           "--------------------------------------------------" & vbCrLf & _
-           "Error Number: " & Err.Number & vbCrLf & _
-           "Description: " & Err.Description & vbCrLf & _
-           "--------------------------------------------------" & vbCrLf & vbCrLf & _
-           "Please show this error to your IT support. It is likely caused by 'Controlled Folder Access' or Antivirus software.", _
-           vbCritical, "File Save Blocked by System"
-    Resume Cleanup
+    Exit Sub ' End of the process
 
 GenericErrHandler:
-    MsgBox "An unexpected generic error occurred." & vbCrLf & _
-           "Error Number: " & Err.Number & vbCrLf & _
-           "Description: " & Err.Description, vbCritical, "Runtime Error"
-    Resume Cleanup
+    MsgBox "An error occurred." & vbCrLf & "Number: " & Err.Number & vbCrLf & "Description: " & Err.Description, vbCritical
 End Sub
