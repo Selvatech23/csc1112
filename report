@@ -1,73 +1,148 @@
 Private Sub cmdReport_Click()
-    ' --- FINAL DIAGNOSTIC: Visible Excel and Simple Path ---
-    
-    Dim conn As Object, rs As Object, dbPath As String
-    Dim xlApp As Object, xlBook As Object, xlSheet1 As Object
-    Dim fileName As String
-    
-    On Error GoTo GenericErrHandler
-    
-    ' --- 1. SETUP ---
+    On Error GoTo ErrHandler
+
+    ' --- Variable Declarations ---
+    Dim conn As Object, rs As Object
+    Dim dbPath As String, reportPath As String, fileName As String
+    Dim reportDate As Date
+    Dim xlApp As Object, xlBook As Object, xlSheet1 As Object, xlSheet2 As Object
+    Dim pCache As Object, pTable As Object
+    Dim outlookApp As Object, mailItem As Object
+    Dim i As Long, j As Long, lastRow As Long
+    Dim fld As Object
+
+    ' --- 1. SETUP AND PATHS ---
     dbPath = "F:\selva\CDD-NWM\Macro\CompanyData.accdb"
-    fileName = "C:\Temp\CompanyReport_Test.xlsx" 'Saving to a simple, trusted path
+    reportPath = "F:\selva\CDD-NWM\Macro\" ' Your required report path
+    reportDate = Date - 1 ' Yesterday's date
     
-    ' --- Check if C:\Temp exists ---
-    If Dir("C:\Temp", vbDirectory) = "" Then
-        MsgBox "Error: The folder C:\Temp was not found. Please create it manually and try again.", vbCritical
+    ' Construct the full file name as per your requirement
+    fileName = reportPath & "Companyreport_" & Format(reportDate, "dd-mmm-yyyy") & ".xlsx"
+
+    ' --- Path and File Validation ---
+    If Dir(dbPath) = "" Then
+        MsgBox "Error: Database file not found." & vbCrLf & dbPath, vbCritical
         Exit Sub
     End If
-    
-    MsgBox "This test will now try to save a file to: " & fileName
-    
-    ' --- 2. FETCH DATA ---
+    If Dir(reportPath, vbDirectory) = "" Then
+        MsgBox "Error: The folder to save the report in does not exist." & vbCrLf & reportPath, vbCritical
+        Exit Sub
+    End If
+
+    ' --- 2. FETCH DATA FROM ACCESS ---
     Set conn = CreateObject("ADODB.Connection")
     conn.Open "Provider=Microsoft.ACE.OLEDB.12.0;Data Source=" & dbPath
-    Set rs = conn.Execute("SELECT * FROM CompanyRecords")
     
+    ' SQL to get all records up to and including yesterday
+    Set rs = conn.Execute("SELECT * FROM CompanyRecords WHERE SubmissionDate <= #" & Format(reportDate, "mm/dd/yyyy") & "#")
+
     If rs.EOF Then
-        MsgBox "No data in the database to report on.", vbInformation
+        MsgBox "No data available for the report period (up to " & Format(reportDate, "dd-mmm-yyyy") & ").", vbInformation
         rs.Close: conn.Close
         Exit Sub
     End If
-    
-    ' --- 3. CREATE VISIBLE EXCEL WORKBOOK ---
+
+    ' --- 3. CREATE AND POPULATE VISIBLE EXCEL WORKBOOK ---
     Set xlApp = ThisWorkbook.Application
-    Set xlBook = xlApp.Workbooks.Add ' You will see a new workbook appear
-    xlApp.Visible = True ' Ensure Excel is visible
-    Set xlSheet1 = xlBook.Sheets(1)
+    xlApp.ScreenUpdating = False ' Turn off screen flicker for speed
     
-    ' --- 4. POPULATE DATA ---
-    Dim i As Long
+    Set xlBook = xlApp.Workbooks.Add
+    Set xlSheet1 = xlBook.Sheets(1)
+    xlSheet1.Name = "RawData"
+
+    ' Write headers
     For i = 0 To rs.Fields.Count - 1
         xlSheet1.Cells(1, i + 1).Value = rs.Fields(i).Name
     Next i
+
+    ' Write data from recordset
     xlSheet1.Cells(2, 1).CopyFromRecordset rs
-    rs.Close: conn.Close
+    rs.Close
+    conn.Close
+    
+    ' --- 4. FORMATTING AND HIGHLIGHTING (WITH DATE FIX) ---
+    lastRow = xlSheet1.Cells(xlSheet1.Rows.Count, "A").End(-4162).Row ' xlUp
+
+    ' Find columns with dates and format them correctly
+    For j = 1 To xlSheet1.Cells(1, xlSheet1.Columns.Count).End(-4159).Column 'xlToLeft
+        If InStr(1, xlSheet1.Cells(1, j).Value, "Date", vbTextCompare) > 0 Then
+            ' This column header contains "Date", so format it
+            xlSheet1.Columns(j).NumberFormat = "dd-mmm-yyyy"
+        End If
+    Next j
+
+    ' Highlight rows where company is not registered in India
+    For i = 2 To lastRow
+        ' Assumes column F (the 6th column) is "RegisteredInIndia"
+        If xlSheet1.Cells(i, 6).Value = False Then
+            xlSheet1.Range("A" & i).EntireRow.Interior.Color = RGB(255, 165, 0) ' Orange
+        End If
+    Next i
+    
     xlSheet1.Columns.AutoFit
-    
-    ' --- 5. ATTEMPT TO SAVE ---
+
+    ' --- 5. CREATE PIVOT TABLE ---
+    Set xlSheet2 = xlBook.Sheets.Add(After:=xlSheet1)
+    xlSheet2.Name = "PivotReport"
+    Set pCache = xlBook.PivotCaches.Create(SourceType:=1, SourceData:=xlSheet1.Range("A1").CurrentRegion)
+    Set pTable = pCache.CreatePivotTable(TableDestination:=xlSheet2.Range("A3"), TableName:="CompanyPivot")
+
+    pTable.PivotFields("Location").Orientation = 1 ' xlRowField
+    pTable.AddDataField pTable.PivotFields("CRNNumber"), "Count of Companies", -4112 ' xlCount
+
+    ' --- 6. SAVE THE REPORT ---
     On Error Resume Next
-    Kill fileName
-    On Error GoTo GenericErrHandler
+    Kill fileName ' Delete old file to prevent errors
+    On Error GoTo ErrHandler
     
-    MsgBox "Data is populated. The code will now attempt to save the visible workbook.", vbInformation
-    
-    xlBook.SaveAs fileName, 51 ' Attempting to save the new, VISIBLE workbook
-    
-    MsgBox "The 'SaveAs' command has been executed.", vbInformation
-    
-    ' --- 6. FINAL VERIFICATION ---
+    xlBook.SaveAs fileName, 51 ' 51 = .xlsx format
+
+    ' --- 7. VERIFY SAVE AND SEND EMAIL ---
     If Dir(fileName) = "" Then
-        MsgBox "CRITICAL FAILURE: The SaveAs command ran but the file was NOT created." & vbCrLf & _
-               "This confirms an external program (Antivirus/Security) is blocking the save." & vbCrLf & _
-               "Please show this message to your IT department.", vbCritical
-    Else
-        MsgBox "SUCCESS! The test file was created successfully at: " & fileName, vbInformation
-        xlBook.Close False ' Close the test book
+        MsgBox "Error: Failed to save the report." & vbCrLf & _
+               "Please check permissions for the folder: " & reportPath, vbCritical, "Save Operation Failed"
+        GoTo Cleanup
     End If
 
-    Exit Sub ' End of the process
+    Set outlookApp = CreateObject("Outlook.Application")
+    Set mailItem = outlookApp.CreateItem(0)
 
-GenericErrHandler:
-    MsgBox "An error occurred." & vbCrLf & "Number: " & Err.Number & vbCrLf & "Description: " & Err.Description, vbCritical
+    With mailItem
+        .To = "rsbdb@rbos.co.uk"
+        .CC = "rsbdb@rbos.co.uk"
+        .Subject = "Company Registration Details " & Format(reportDate, "dd-mmm-yyyy")
+        .Body = "Hi Team," & vbCrLf & vbCrLf & _
+                "Please find the company registration details for the close of business date " & Format(reportDate, "dd-mmm-yyyy") & "." & vbCrLf & vbCrLf & _
+                "Thanks and Regards," & vbCrLf & "ABC Support Team"
+        .Attachments.Add fileName
+        .Display ' Opens email for review. Change to .Send to mail it automatically.
+    End With
+
+    ' --- Close the generated report after it has been attached
+    xlBook.Close SaveChanges:=False
+    
+    MsgBox "Report generated successfully and attached to email!", vbInformation
+
+Cleanup:
+    On Error Resume Next ' Ignore errors during cleanup
+    If Not xlApp Is Nothing Then xlApp.ScreenUpdating = True
+    If Not rs Is Nothing Then If rs.State = 1 Then rs.Close
+    If Not conn Is Nothing Then If conn.State = 1 Then conn.Close
+    Set mailItem = Nothing
+    Set outlookApp = Nothing
+    Set pTable = Nothing
+    Set pCache = Nothing
+    Set xlSheet1 = Nothing
+    Set xlSheet2 = Nothing
+    Set xlBook = Nothing
+    Set xlApp = Nothing
+    Set rs = Nothing
+    Set conn = Nothing
+    Exit Sub
+
+ErrHandler:
+    MsgBox "An unexpected error occurred." & vbCrLf & _
+           "Error Number: " & Err.Number & vbCrLf & _
+           "Description: " & Err.Description, vbCritical
+    Resume Cleanup
 End Sub
