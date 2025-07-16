@@ -1,0 +1,23 @@
+Sub GetPageHTML()
+    Dim http As Object
+    Dim url As String
+    Dim html As New MSHTML.HTMLDocument
+
+    ' The URL of the initial page with the CIS code field
+    url = "http://www.your_webpage.com" ' <-- Change this to the actual URL
+
+    Set http = CreateObject("MSXML2.ServerXMLHTTP")
+    http.Open "GET", url, False
+    http.send
+
+    If http.Status = 200 Then
+        html.body.innerHTML = http.responseText
+        ' Output the entire HTML to a worksheet to inspect it
+        ThisWorkbook.Sheets("Sheet1").Cells(1, 1).Value = html.body.innerHTML
+        MsgBox "HTML has been copied to Sheet1."
+    Else
+        MsgBox "Failed to retrieve the webpage. Status: " & http.Status
+    End If
+
+    Set http = Nothing
+End Sub
